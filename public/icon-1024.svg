@@ -1,0 +1,10 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" fill="#0a0a0a"/>
+  <rect x="52" y="52" width="920" height="920" rx="100" fill="#1a1a2e" stroke="#00ff00" stroke-width="8"/>
+  <text x="512" y="260" font-family="Arial, sans-serif" font-size="128" font-weight="bold" fill="#00ff00" text-anchor="middle">NEO-NOIR</text>
+  <text x="512" y="400" font-family="Arial, sans-serif" font-size="96" fill="#ffffff" text-anchor="middle">CITY</text>
+  <circle cx="260" cy="640" r="80" fill="#00ff00" opacity="0.8"/>
+  <circle cx="512" cy="640" r="80" fill="#00ff00" opacity="0.8"/>
+  <circle cx="764" cy="640" r="80" fill="#00ff00" opacity="0.8"/>
+  <rect x="200" y="760" width="624" height="100" rx="20" fill="#00ff00" opacity="0.3"/>
+</svg>

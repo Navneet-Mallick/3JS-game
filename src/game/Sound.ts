@@ -212,22 +212,21 @@ export class Sound {
         
         kickOsc.type = 'sine';
         kickOsc.frequency.setValueAtTime(60, this.ctx.currentTime);
+        
         kickFilter.type = 'lowpass';
         kickFilter.frequency.value = 100;
+        kickFilter.Q.value = 1;
         
         kickGain.gain.setValueAtTime(0, this.ctx.currentTime);
-        kickGain.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 0.01);
-        kickGain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+        kickGain.gain.linearRampToValueAtTime(0.8, this.ctx.currentTime + 0.01);
+        kickGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.1);
         
         kickOsc.connect(kickFilter);
         kickFilter.connect(kickGain);
         kickGain.connect(this.bgmGain);
         
-        // Schedule kick drum pattern
-        for (let i = 0; i < 4; i++) {
-            kickOsc.start(this.ctx.currentTime + i * beatDuration);
-            kickOsc.stop(this.ctx.currentTime + i * beatDuration + 0.1);
-        }
+        kickOsc.start(this.ctx.currentTime);
+        kickOsc.stop(this.ctx.currentTime + 0.1);
         
         this.bgmOscillators.push(kickOsc);
         
@@ -237,25 +236,22 @@ export class Sound {
         const hihatFilter = this.ctx.createBiquadFilter();
         
         hihatOsc.type = 'square';
-        hihatOsc.frequency.setValueAtTime(8000, this.ctx.currentTime);
+        hihatOsc.frequency.setValueAtTime(800, this.ctx.currentTime);
+        
         hihatFilter.type = 'highpass';
         hihatFilter.frequency.value = 5000;
+        hihatFilter.Q.value = 1;
         
         hihatGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        hihatGain.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + 0.01);
+        hihatGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.05);
         
         hihatOsc.connect(hihatFilter);
         hihatFilter.connect(hihatGain);
         hihatGain.connect(this.bgmGain);
         
-        // Schedule hi-hat pattern
-        for (let i = 0; i < 8; i++) {
-            const time = this.ctx.currentTime + i * beatDuration * 0.5;
-            hihatGain.gain.linearRampToValueAtTime(0.1, time);
-            hihatGain.gain.linearRampToValueAtTime(0, time + 0.05);
-        }
-        
-        hihatOsc.start();
-        hihatOsc.stop(this.ctx.currentTime + beatDuration * 4);
+        hihatOsc.start(this.ctx.currentTime + beatDuration * 0.5);
+        hihatOsc.stop(this.ctx.currentTime + beatDuration * 0.5 + 0.05);
         
         this.bgmOscillators.push(hihatOsc);
     }
