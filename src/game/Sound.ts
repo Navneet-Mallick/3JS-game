@@ -47,6 +47,10 @@ export class Sound {
         }
     }
 
+    public resume() {
+        this.ensureAudioContext();
+    }
+
     private startAmbient() {
         if (!this.ctx || !this.masterGain) return;
         this.ambientGain = this.ctx.createGain();
@@ -78,8 +82,8 @@ export class Sound {
         this.bgmGain.gain.value = 0;
         this.bgmGain.connect(this.masterGain);
         
-        // Start with ambient background music
-        this.startBGM();
+        // Don't start BGM automatically - wait for user interaction
+        console.log('🎵 Radio system initialized - Press Home to start music');
     }
 
     // Radio Stations - 3 Actual Songs
@@ -540,10 +544,6 @@ export class Sound {
         g.gain.setValueAtTime(0.4, this.ctx.currentTime);
         g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
         src.start();
-    }
-
-    public resume() {
-        this.ctx?.resume();
     }
 
     public toggleMute() {
