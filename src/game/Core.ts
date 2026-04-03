@@ -28,6 +28,7 @@ export class Core {
     private enterPrompt = document.getElementById('enter-prompt');
 
     constructor() {
+        try {
         Input.init();
 
         this.scene   = new GameScene();
@@ -82,27 +83,41 @@ export class Core {
         });
 
         this.init();
+        } catch (err) {
+            console.error('[Core constructor] failed:', err);
+            const screen = document.getElementById('loading-screen');
+            if (screen) {
+                screen.innerHTML = `<p style="color:red;font-family:monospace;padding:2rem">Startup Error: ${err}</p>`;
+            }
+        }
     }
 
     private async init() {
-        const bar    = document.getElementById('loader-bar');
-        const screen = document.getElementById('loading-screen');
+        try {
+            const bar    = document.getElementById('loader-bar');
+            const screen = document.getElementById('loading-screen');
 
-        for (let i = 0; i <= 100; i += 10) {
-            if (bar) bar.style.width = `${i}%`;
-            await new Promise(r => setTimeout(r, 30));
+            for (let i = 0; i <= 100; i += 10) {
+                if (bar) bar.style.width = `${i}%`;
+                await new Promise(r => setTimeout(r, 30));
+            }
+
+            if (screen) {
+                screen.style.opacity = '0';
+                setTimeout(() => {
+                    screen.style.display = 'none';
+                    if (this.lockPrompt) this.lockPrompt.style.display = 'flex';
+                }, 600);
+            }
+
+            requestAnimationFrame((t) => this.animate(t));
+        } catch (err) {
+            console.error('[Core.init] failed:', err);
+            const screen = document.getElementById('loading-screen');
+            if (screen) {
+                screen.innerHTML = `<p style="color:red;font-family:monospace;padding:2rem">Error: ${err}</p>`;
+            }
         }
-
-        if (screen) {
-            screen.style.opacity = '0';
-            setTimeout(() => {
-                screen.style.display = 'none';
-                // Show click-to-play after loading
-                if (this.lockPrompt) this.lockPrompt.style.display = 'flex';
-            }, 600);
-        }
-
-        requestAnimationFrame((t) => this.animate(t));
     }
 
     private handleEnterExit() {
