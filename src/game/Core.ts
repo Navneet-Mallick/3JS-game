@@ -309,38 +309,9 @@ export class Core {
             }
         }
         
-        // Radio controls (use different keys to avoid conflicts)
-        // Radio station next (Page Up)
-        if (Input.isKeyPressed('PageUp') && this.gameStarted && !this.pauseMenu.isPaused()) {
-            this.sound.nextRadioStation();
-            const station = this.sound.getCurrentStation();
-            console.log(`🎵 Radio: ${station.name}`);
-        }
-        
-        // Radio station previous (Page Down)
-        if (Input.isKeyPressed('PageDown') && this.gameStarted && !this.pauseMenu.isPaused()) {
-            this.sound.previousRadioStation();
-            const station = this.sound.getCurrentStation();
-            console.log(`🎵 Radio: ${station.name}`);
-        }
-        
-        // Radio toggle (Home)
-        if (Input.isKeyPressed('Home') && this.gameStarted && !this.pauseMenu.isPaused()) {
-            this.sound.toggleRadio();
-        }
-        
-        // Radio volume up (End + Shift)
-        if (Input.isKeyPressed('End') && Input.isKeyDown('Shift') && this.gameStarted && !this.pauseMenu.isPaused()) {
-            const currentVolume = this.sound.getRadioVolume();
-            this.sound.setRadioVolume(Math.min(1, currentVolume + 0.1));
-            console.log(`🔊 Radio Volume: ${Math.round(this.sound.getRadioVolume() * 100)}%`);
-        }
-        
-        // Radio volume down (End + Ctrl)
-        if (Input.isKeyPressed('End') && Input.isKeyDown('Control') && this.gameStarted && !this.pauseMenu.isPaused()) {
-            const currentVolume = this.sound.getRadioVolume();
-            this.sound.setRadioVolume(Math.max(0, currentVolume - 0.1));
-            console.log(`🔊 Radio Volume: ${Math.round(this.sound.getRadioVolume() * 100)}%`);
+        // Mute (M)
+        if (Input.isKeyPressed('m') && this.gameStarted && !this.pauseMenu.isPaused()) {
+            this.sound.toggleMute();
         }
     }
 
