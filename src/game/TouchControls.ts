@@ -1,0 +1,123 @@
+/**
+ * Mobile touch controls — virtual joystick + action buttons
+ */
+export class TouchControls {
+    public static moveX = 0;
+    public static moveY = 0;
+    public static lookX = 0;
+    public static lookY = 0;
+    public static jumpPressed  = false;
+    public static enterPressed = false;
+    public static active = false;
+
+    private static joystickEl: HTMLElement;
+    private static knobEl: HTMLElement;
+    private static joystickId: number | null = null;
+    private static joystickOrigin = { x: 0, y: 0 };
+    private static lookId: number | null = null;
+    private static lookLast = { x: 0, y: 0 };
+
+    public static init() {
+        if (!('ontouchstart' in window)) return;
+        this.active = true;
+
+        const ui = document.createElement('div');
+        ui.id = 'touch-ui';
+        ui.innerHTML = `
+            <div id="joystick-zone">
+                <div id="joystick-base"><div id="joystick-knob"></div></div>
+            </div>
+            <div id="touch-buttons">
+                <button id="btn-jump">JUMP</button>
+                <button id="btn-enter">F</button>
+            </div>
+        `;
+        document.body.appendChild(ui);
+
+        this.joystickEl = document.getElementById('joystick-base')!;
+        this.knobEl     = document.getElementById('joystick-knob')!;
+
+        const zone = document.getElementById('joystick-zone')!;
+        zone.addEventListener('touchstart',  (e) => this.onJoyStart(e),  { passive: false });
+        zone.addEventListener('touchmove',   (e) => this.onJoyMove(e),   { passive: false });
+        zone.addEventListener('touchend',    (e) => this.onJoyEnd(e),    { passive: false });
+
+        // Right side of screen = look
+        const rightZone = document.createElement('div');
+        rightZone.id = 'look-zone';
+        document.body.appendChild(rightZone);
+        rightZone.addEventListener('touchstart',  (e) => this.onLookStart(e), { passive: false });
+        rightZone.addEventListener('touchmove',   (e) => this.onLookMove(e),  { passive: false });
+        rightZone.addEventListener('touchend',    ()  => this.onLookEnd(),    { passive: false });
+
+        document.getElementById('btn-jump')!.addEventListener('touchstart',  () => { this.jumpPressed  = true;  }, { passive: true });
+        document.getElementById('btn-jump')!.addEventListener('touchend',    () => { this.jumpPressed  = false; }, { passive: true });
+        document.getElementById('btn-enter')!.addEventListener('touchstart', () => { this.enterPressed = true;  }, { passive: true });
+        document.getElementById('btn-enter')!.addEventListener('touchend',   () => { this.enterPressed = false; }, { passive: true });
+    }
+
+    private static onJoyStart(e: TouchEvent) {
+        e.preventDefault();
+        const t = e.changedTouches[0];
+        this.joystickId = t.identifier;
+        const r = this.joystickEl.getBoundingClientRect();
+        this.joystickOrigin = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+
+    private static onJoyMove(e: TouchEvent) {
+        e.preventDefault();
+        for (const t of Array.from(e.changedTouches)) {
+            if (t.identifier !== this.joystickId) continue;
+            const dx = t.clientX - this.joystickOrigin.x;
+            const dy = t.clientY - this.joystickOrigin.y;
+            const dist = Math.min(40, Math.sqrt(dx * dx + dy * dy));
+            const angle = Math.atan2(dy, dx);
+            const nx = Math.cos(angle) * dist;
+            const ny = Math.sin(angle) * dist;
+            this.knobEl.style.transform = `translate(${nx}px, ${ny}px)`;
+            this.moveX = nx / 40;
+            this.moveY = ny / 40;
+        }
+    }
+
+    private static onJoyEnd(e: TouchEvent) {
+        for (const t of Array.from(e.changedTouches)) {
+            if (t.identifier === this.joystickId) {
+                this.joystickId = null;
+                this.moveX = 0;
+                this.moveY = 0;
+                this.knobEl.style.transform = 'translate(0,0)';
+            }
+        }
+    }
+
+    private static onLookStart(e: TouchEvent) {
+        e.preventDefault();
+        const t = e.changedTouches[0];
+        this.lookId   = t.identifier;
+        this.lookLast = { x: t.clientX, y: t.clientY };
+        this.lookX = 0;
+        this.lookY = 0;
+    }
+
+    private static onLookMove(e: TouchEvent) {
+        e.preventDefault();
+        for (const t of Array.from(e.changedTouches)) {
+            if (t.identifier !== this.lookId) continue;
+            this.lookX = (t.clientX - this.lookLast.x) * 0.4;
+            this.lookY = (t.clientY - this.lookLast.y) * 0.4;
+            this.lookLast = { x: t.clientX, y: t.clientY };
+        }
+    }
+
+    private static onLookEnd() {
+        this.lookId = null;
+        this.lookX  = 0;
+        this.lookY  = 0;
+    }
+
+    public static clearFrame() {
+        this.lookX = 0;
+        this.lookY = 0;
+    }
+}
