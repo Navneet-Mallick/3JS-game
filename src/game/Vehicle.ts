@@ -31,6 +31,8 @@ export class Vehicle {
 
     private sound: Sound;
     private currentSteeringValue = 0;
+    private speedBoostTimer = 0;
+    private speedBoostMultiplier = 1;
 
     constructor(
         scene: THREE.Scene,
@@ -63,16 +65,16 @@ export class Vehicle {
         const base = {
             radius: 0.38,
             directionLocal: new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness: 35,
-            suspensionRestLength: 0.5,
-            frictionSlip: 10.5,
-            dampingRelaxation: 2.8,
-            dampingCompression: 5.0,
-            maxSuspensionForce: 120000,
-            rollInfluence: 0.008,
+            suspensionStiffness: 30,
+            suspensionRestLength: 0.6,
+            frictionSlip: 12.0,
+            dampingRelaxation: 2.2,
+            dampingCompression: 4.5,
+            maxSuspensionForce: 100000,
+            rollInfluence: 0.02,
             axleLocal: new CANNON.Vec3(1, 0, 0),
             chassisConnectionPointLocal: new CANNON.Vec3(1, 1, 0),
-            maxSuspensionTravel: 0.3,
+            maxSuspensionTravel: 0.4,
             customSlidingFrictionWheelStep: 1,
         };
 
@@ -198,6 +200,14 @@ export class Vehicle {
     public update(dt: number) {
         const spd = this.getSpeedKmh();
 
+        // Update speed boost
+        if (this.speedBoostTimer > 0) {
+            this.speedBoostTimer -= dt;
+            this.speedBoostMultiplier = 2.0; // 2x speed boost
+        } else {
+            this.speedBoostMultiplier = 1.0;
+        }
+
         // Gear logic
         this.gearTimer += dt;
         if (this.gearTimer > 0.4) {
@@ -209,7 +219,7 @@ export class Vehicle {
         // Torque curve — peaks at mid-gear, falls off at top
         const gearRatio = this.GEAR_RATIOS[this.gear] ?? 1;
         const ENGINE_BASE = 4800;
-        const ENGINE_FORCE = ENGINE_BASE * gearRatio;
+        const ENGINE_FORCE = ENGINE_BASE * gearRatio * this.speedBoostMultiplier;
         const BRAKE_FORCE  = 200;
         const MAX_STEER = Math.max(0.15, 0.48 - spd * 0.003);
         const STEER_SPEED = 4.0;
@@ -336,5 +346,9 @@ export class Vehicle {
     public getSpeedKmh(): number {
         const v = this.chassisBody.velocity;
         return Math.round(Math.sqrt(v.x * v.x + v.z * v.z) * 3.6);
+    }
+
+    public boostSpeed() {
+        this.speedBoostTimer = 5.0; // 5 second boost
     }
 }

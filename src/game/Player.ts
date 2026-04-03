@@ -1,6 +1,7 @@
 ﻿import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Input } from './Input';
+import { Weapon } from './Weapon';
 
 export class Player {
     private scene: THREE.Scene;
@@ -30,8 +31,12 @@ export class Player {
     private readonly MIN_PITCH  = -0.15;
     private readonly MAX_PITCH  = 0.55;
     private firstPerson = false;
+    private weapon: Weapon;
+    private health = 100;
+    private armor = 0;
+    private playerInVehicle = false;
 
-    constructor(scene: THREE.Scene, world: CANNON.World, camera: THREE.PerspectiveCamera) {
+    constructor(scene: THREE.Scene, world: CANNON.World, camera: THREE.PerspectiveCamera, playerMaterial?: CANNON.Material) {
         this.scene  = scene;
         this.camera = camera;
 
@@ -41,12 +46,15 @@ export class Player {
         this.body = new CANNON.Body({
             mass: 80,
             shape: new CANNON.Sphere(0.4),
-            position: new CANNON.Vec3(0, 3, 0),
+            position: new CANNON.Vec3(0, 5, 0), // Start higher to ensure ground contact
             fixedRotation: true,
             linearDamping: 0.85,
             angularDamping: 1.0,
+            material: playerMaterial || undefined
         });
         world.addBody(this.body);
+
+        this.weapon = new Weapon(scene, world, camera);
 
         this.body.addEventListener('collide', () => {
             this.onGround  = true;
@@ -126,14 +134,32 @@ export class Player {
 
         if (moving) {
             dir.normalize();
+            // Apply velocity directly with less damping for better movement
             this.body.velocity.x = dir.x * speed;
             this.body.velocity.z = dir.z * speed;
+            
+            // Keep player from falling too fast
+            if (this.body.velocity.y < -10) {
+                this.body.velocity.y = -10;
+            }
 
             const targetY = Math.atan2(dir.x, dir.z);
             let diff = targetY - this.mesh.rotation.y;
             while (diff >  Math.PI) diff -= Math.PI * 2;
             while (diff < -Math.PI) diff += Math.PI * 2;
             this.mesh.rotation.y += diff * Math.min(1, 18 * dt);
+        } else {
+            // Stop horizontal movement when not moving
+            this.body.velocity.x *= 0.8;
+            this.body.velocity.z *= 0.8;
+        }
+
+        // Simple ground detection - if player is too low, push them up
+        if (this.body.position.y < 2) {
+            this.body.position.y = 2;
+            this.body.velocity.y = 0;
+            this.onGround = true;
+            this.groundTimer = 0.1;
         }
 
         // Jump
@@ -143,8 +169,12 @@ export class Player {
             this.groundTimer = 0;
         }
 
-        if (this.groundTimer > 0) { this.groundTimer -= dt; this.onGround = true; }
-        else { this.onGround = false; }
+        if (this.groundTimer > 0) { 
+            this.groundTimer -= dt; 
+            if (this.groundTimer <= 0) {
+                this.onGround = false;
+            }
+        }
 
         // Sync mesh
         this.mesh.position.set(
@@ -152,6 +182,24 @@ export class Player {
             this.body.position.y - 0.4,
             this.body.position.z
         );
+
+        // Update weapon
+        const cameraPos = new THREE.Vector3(
+            this.body.position.x,
+            this.body.position.y + 1.4,
+            this.body.position.z
+        );
+        const cameraQuat = new THREE.Quaternion();
+        cameraQuat.setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0));
+        
+        this.weapon.updatePosition(cameraPos, cameraQuat);
+        this.weapon.setVisible(!this.playerInVehicle);
+        
+        const weaponFired = this.weapon.update(dt, cameraPos, cameraQuat);
+        if (weaponFired) {
+            // Add crime for shooting
+            // This will be handled by the Core class
+        }
 
         // Walk animation + camera bob
         if (moving) {
@@ -221,4 +269,22 @@ export class Player {
         this.body.velocity.set(0, 0, 0);
         this.mesh.position.set(x, y - 0.4, z);
     }
+
+    public setInVehicle(inVehicle: boolean) {
+        this.playerInVehicle = inVehicle;
+        this.visible = !inVehicle;
+    }
+
+    public getHealth(): number { return this.health; }
+    public getArmor(): number { return this.armor; }
+    public takeDamage(damage: number) {
+        if (this.armor > 0) {
+            const armorDamage = Math.min(damage, this.armor);
+            this.armor -= armorDamage;
+            damage -= armorDamage;
+        }
+        this.health -= damage;
+    }
+
+    public getWeapon(): Weapon { return this.weapon; }
 }

@@ -1,4 +1,5 @@
 import * as CANNON from 'cannon-es';
+import * as THREE from 'three';
 import { GameScene } from './Scene';
 import { Physics } from './Physics';
 import { Player } from './Player';
@@ -12,6 +13,9 @@ import { MissionSystem } from './Mission';
 import { ScoreSystem } from './Score';
 import { GamepadInput } from './Gamepad';
 import { TouchControls } from './TouchControls';
+import { Pedestrian } from './Pedestrian';
+import { Police } from './Police';
+import { WantedLevel } from './WantedLevel';
 
 export class Core {
     private scene: GameScene;
@@ -20,6 +24,9 @@ export class Core {
     private vehicle: Vehicle;
     private city: City;
     private traffic: TrafficCar[] = [];
+    private pedestrians: Pedestrian[] = [];
+    private police: Police[] = [];
+    private wantedLevel: WantedLevel;
     private minimap: Minimap;
     private sound: Sound;
     private missions: MissionSystem;
@@ -48,7 +55,7 @@ export class Core {
 
             this.city = new City(this.scene.getScene(), this.physics.getWorld(), this.physics.groundMaterial);
 
-            this.player  = new Player(this.scene.getScene(), this.physics.getWorld(), this.scene.getCamera());
+            this.player  = new Player(this.scene.getScene(), this.physics.getWorld(), this.scene.getCamera(), this.physics.playerMaterial);
             this.vehicle = new Vehicle(
                 this.scene.getScene(),
                 this.physics.getWorld(),
@@ -75,6 +82,11 @@ export class Core {
             this.minimap  = new Minimap('minimap-canvas');
             this.missions = new MissionSystem(this.scene.getScene());
             this.score    = new ScoreSystem();
+            
+            // Initialize GTA-style systems
+            this.wantedLevel = new WantedLevel(this.scene.getScene());
+            this.spawnPedestrians();
+            this.spawnPolice();
 
             document.addEventListener('pointerlockchange', () => {
                 const locked = !!document.pointerLockElement;
@@ -138,6 +150,38 @@ export class Core {
         }
     }
 
+    private spawnPedestrians() {
+        const pedestrianPositions: [number, number, number][] = [
+            [10, 1, 10], [-10, 1, 10], [10, 1, -10], [-10, 1, -10],
+            [20, 1, 0], [-20, 1, 0], [0, 1, 20], [0, 1, -20],
+            [15, 1, 15], [-15, 1, 15], [15, 1, -15], [-15, 1, -15]
+        ];
+
+        pedestrianPositions.forEach(([x, y, z]) => {
+            this.pedestrians.push(new Pedestrian(
+                this.scene.getScene(),
+                this.physics.getWorld(),
+                new THREE.Vector3(x, y, z)
+            ));
+        });
+    }
+
+    private spawnPolice() {
+        const policePositions: [number, number, number][] = [
+            [30, 1, 30], [-30, 1, 30], [30, 1, -30], [-30, 1, -30]
+        ];
+
+        policePositions.forEach(([x, y, z]) => {
+            this.police.push(new Police(
+                this.scene.getScene(),
+                this.physics.getWorld(),
+                this.scene.getCamera(),
+                new CANNON.Vec3(x, y, z),
+                this.sound
+            ));
+        });
+    }
+
     private handleEnterExit() {
         const enterKey = Input.isKeyPressed('f') ||
             (GamepadInput.connected && GamepadInput.btnXPressed()) ||
@@ -146,25 +190,27 @@ export class Core {
         if (!enterKey) return;
 
         if (this.playerInVehicle) {
+            this.player.setInVehicle(true);
             this.playerInVehicle = false;
             this.vehicle.isOccupied = false;
-            this.player.visible = true;
-            const vp = this.vehicle.getPosition();
-            this.player.setPosition(vp.x + 3, vp.y + 1, vp.z);
-            if (this.modeBadge) this.modeBadge.textContent = 'On Foot';
-            if (this.speedoEl)  this.speedoEl.classList.remove('active');
-            this.sound.stopEngine();
+            this.vehicle.chassisMesh.visible = true;
+            this.scene.getCamera().parent = this.scene.getScene();
+            this.modeBadge!.textContent = 'ON FOOT';
+            this.modeBadge!.style.color = '#00ff00';
         } else {
-            const vp = this.vehicle.getPosition();
-            const pp = this.player.getPosition();
-            if (vp.distanceTo(pp) < 6) {
+            const distance = this.player.getPosition().distanceTo(this.vehicle.getPosition());
+            if (distance < 4) {
                 this.playerInVehicle = true;
+                this.player.setInVehicle(true);
                 this.vehicle.isOccupied = true;
-                this.player.visible = false;
-                if (this.modeBadge) this.modeBadge.textContent = 'Driving';
-                if (this.speedoEl)  this.speedoEl.classList.add('active');
-                this.sound.startEngine();
+                this.vehicle.chassisMesh.visible = false;
+                this.modeBadge!.textContent = 'IN VEHICLE';
+                this.modeBadge!.style.color = '#ffff00';
             }
+        }
+        if (this.speedoEl) {
+            this.speedoEl.classList.add('active');
+            this.sound.startEngine();
         }
     }
 
@@ -204,6 +250,9 @@ export class Core {
             if (distance < 4 && velocity > 20) {
                 destructible.health -= velocity * 0.5;
                 
+                // Add crime for property destruction
+                this.wantedLevel.addCrime('property');
+                
                 if (destructible.health <= 0) {
                     // Destroy the destructible
                     destructible.mesh.visible = false;
@@ -224,6 +273,53 @@ export class Core {
                 }
             }
         });
+        
+        // Check for pedestrian collisions (crimes)
+        this.pedestrians.forEach(pedestrian => {
+            if (!pedestrian.isAliveStatus()) return;
+            
+            const distance = playerPos.distanceTo(pedestrian.getPosition());
+            const currentVelocity = this.playerInVehicle ? 
+                this.vehicle.getSpeedKmh() : 
+                (this.player.body ? Math.sqrt(this.player.body.velocity.x ** 2 + this.player.body.velocity.z ** 2) * 10 : 0);
+            
+            if (distance < 2 && currentVelocity > 10) {
+                pedestrian.takeDamage(100);
+                this.wantedLevel.addCrime('violent');
+                this.score.add(-200, 'ASSAULT'); // Negative score for crimes
+            }
+        });
+        
+        // Handle power-ups
+        const powerUps = this.city.getPowerUps();
+        powerUps.forEach((powerUp, index) => {
+            if (!powerUp.userData || powerUp.userData.collected) return;
+            
+            const distance = playerPos.distanceTo(powerUp.position);
+            if (distance < 2.5) {
+                powerUp.userData.collected = true;
+                powerUp.visible = false;
+                
+                // Apply power-up effect
+                if (powerUp.userData.powerType === 'speed') {
+                    this.score.add(200, 'POWERUP');
+                    this.sound.playPickup();
+                    
+                    // Boost vehicle speed if in vehicle
+                    if (this.playerInVehicle) {
+                        // Temporary speed boost - could be enhanced further
+                        this.vehicle.boostSpeed();
+                    }
+                }
+            }
+            
+            // Animate power-ups
+            if (!powerUp.userData.collected && powerUp.userData.rotationSpeed) {
+                powerUp.rotation.y += powerUp.userData.rotationSpeed;
+                powerUp.rotation.x += powerUp.userData.rotationSpeed * 0.5;
+                powerUp.position.y = 1 + Math.sin(Date.now() * 0.003 + index) * 0.3;
+            }
+        });
     }
 
     private animate(time: number) {
@@ -241,6 +337,12 @@ export class Core {
         this.player.update(dt);
         this.vehicle.update(dt);
         this.traffic.forEach(t => t.update(dt));
+        
+        // Update GTA-style systems
+        const playerPos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
+        this.pedestrians.forEach(p => p.update(dt, playerPos));
+        this.police.forEach(p => p.update(dt, playerPos, this.playerInVehicle, this.wantedLevel.getCurrentLevel()));
+        this.wantedLevel.update(dt);
         
         // Handle interactions
         this.handleInteractions();

@@ -18,6 +18,7 @@ function mulberry32(seed: number) {
 export class City {
     private collectibles: THREE.Mesh[] = [];
     private destructibles: { mesh: THREE.Mesh; body: CANNON.Body; health: number }[] = [];
+    private powerUps: THREE.Mesh[] = [];
 
     constructor(scene: THREE.Scene, world: CANNON.World, groundMaterial: CANNON.Material) {
         this.buildGround(scene, world, groundMaterial);
@@ -26,10 +27,12 @@ export class City {
         this.buildStreetLights(scene);
         this.buildCollectibles(scene, world);
         this.buildDestructibles(scene, world);
+        this.buildPowerUps(scene, world);
     }
 
     public getCollectibles() { return this.collectibles; }
     public getDestructibles() { return this.destructibles; }
+    public getPowerUps() { return this.powerUps; }
 
     private buildGround(scene: THREE.Scene, world: CANNON.World, groundMaterial: CANNON.Material) {
         const mesh = new THREE.Mesh(
@@ -231,6 +234,47 @@ export class City {
             world.addBody(body);
 
             this.destructibles.push({ mesh: destructible, body, health: 100 });
+        });
+    }
+
+    private buildPowerUps(scene: THREE.Scene, world: CANNON.World) {
+        const powerUpPositions: [number, number, number][] = [
+            [20, 1, 0], [-20, 1, 0], [0, 1, 20], [0, 1, -20],
+            [35, 1, 15], [-35, 1, 15], [35, 1, -15], [-35, 1, -15]
+        ];
+
+        powerUpPositions.forEach(([x, y, z], index) => {
+            const geometry = new THREE.TetrahedronGeometry(0.6, 0);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0xff00ff,
+                emissive: 0xff00ff,
+                emissiveIntensity: 0.8,
+                metalness: 0.7,
+                roughness: 0.3
+            });
+            const powerUp = new THREE.Mesh(geometry, material);
+            powerUp.position.set(x, y, z);
+            powerUp.castShadow = true;
+            powerUp.userData = { 
+                type: 'powerup', 
+                id: index, 
+                collected: false,
+                powerType: 'speed',
+                rotationSpeed: Math.random() * 0.03 + 0.02
+            };
+            
+            scene.add(powerUp);
+            this.powerUps.push(powerUp);
+
+            // Add physics body for collision detection
+            const body = new CANNON.Body({
+                mass: 0,
+                shape: new CANNON.Sphere(0.6),
+                position: new CANNON.Vec3(x, y, z)
+            });
+            body.collisionFilterGroup = 8; // Power-up group
+            body.collisionFilterMask = 1; // Collide with player/vehicle
+            world.addBody(body);
         });
     }
 }
