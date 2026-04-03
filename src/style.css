@@ -212,16 +212,25 @@ body > canvas {
 
 /* ── Speedometer (bottom-center) ── */
 .speedometer {
-  position: absolute; bottom: 24px; left: 50%;
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
   transform: translateX(-50%);
-  display: none; flex-direction: column; align-items: center;
-  background: rgba(255,255,255,0.75);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(0,0,0,0.08);
+  
+  display: none;
+  flex-direction: column;
+  align-items: center;
+
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(8px); /* fixed property */
+  
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 12px;
+  
   padding: 8px 24px 6px;
   pointer-events: none;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .speedometer.active { display: flex; }
@@ -355,4 +364,3 @@ kbd {
   user-select: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
-
