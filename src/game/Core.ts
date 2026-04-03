@@ -256,6 +256,20 @@ export class Core {
         });
     }
 
+    private handleShortcuts() {
+        // Quick save (F5)
+        if (Input.isKeyPressed('F5')) {
+            this.saveSystem.quickSave();
+            console.log('Quick saved!');
+        }
+        
+        // Quick load (F9)
+        if (Input.isKeyPressed('F9')) {
+            this.saveSystem.quickLoad();
+            console.log('Quick loaded!');
+        }
+    }
+
     private handleEnterExit() {
         const enterKey = Input.isKeyPressed('f') ||
             (GamepadInput.connected && GamepadInput.btnXPressed()) ||
@@ -411,6 +425,7 @@ export class Core {
         this.lastTime = time;
 
         this.handleEnterExit();
+        this.handleShortcuts();
         this.physics.update(dt);
         this.player.update(dt);
         this.vehicle.update(dt);
@@ -457,7 +472,10 @@ export class Core {
 
         // Update money display
         if (this.moneyEl) {
-            this.moneyEl.textContent = `$${this.moneySystem.getCurrentMoney().toLocaleString()}`;
+            const moneyValue = document.getElementById('money-value');
+            if (moneyValue) {
+                moneyValue.textContent = `$${this.moneySystem.getCurrentMoney().toLocaleString()}`;
+            }
         }
 
         // Mission update
