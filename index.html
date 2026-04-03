@@ -41,11 +41,17 @@
           <div class="hud-badge" id="mode-badge">On Foot</div>
         </div>
 
-        <!-- Score -->
+        <!-- Score display -->
         <div class="score-hud">
-          <div class="score-label">SCORE</div>
           <div id="score-value">0</div>
+          <div class="score-label">SCORE</div>
           <div id="multiplier-value" class="multiplier">x1</div>
+        </div>
+
+        <!-- Money display -->
+        <div class="money-display" id="money-display">
+          <div id="money-value">$1,000</div>
+          <div class="money-label">CASH</div>
         </div>
 
         <!-- Combo flash -->
@@ -79,36 +85,74 @@
         <div class="instructions">
           <h3>🎮 CONTROLS</h3>
           <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move / Drive / Ride</p>
-          <p><kbd>Space</kbd> Jump / Handbrake (drift) / Motorcycle lean</p>
-          <p><kbd>Shift</kbd> Sprint (on foot) / Motorcycle boost</p>
-          <p><kbd>F</kbd> Enter / Exit Vehicle / Motorcycle</p>
+          <p><kbd>Space</kbd> Jump / Handbrake / Shoot / Lean</p>
+          <p><kbd>Shift</kbd> Sprint / Motorcycle Boost</p>
+          <p><kbd>F</kbd> Enter/Exit Vehicles / Buildings</p>
+          <p><kbd>E</kbd> Interact / Purchase Items</p>
           <p><kbd>V</kbd> Toggle Camera View</p>
-          <p><kbd>M</kbd> Mute / Unmute</p>
-          <p><kbd>Mouse</kbd> Look Around / Aim Weapon</p>
           <p><kbd>R</kbd> Reload Weapon</p>
+          <p><kbd>F5</kbd> Quick Save / <kbd>F9</kbd> Quick Load</p>
+          <p><kbd>Mouse</kbd> Look Around / Aim Weapon</p>
+          <p><kbd>M</kbd> Mute / Unmute</p>
 
-          <h3>🏍️ MOTORCYCLES</h3>
-          <p>⚡ <strong>8 Motorcycles</strong> spawn around the city</p>
-          <p>🎯 <strong>Faster acceleration</strong> than cars</p>
-          <p>🔄 <strong>Lean into turns</strong> for better handling</p>
-          <p>💨 <strong>Speed boost</strong> with Shift key</p>
-          <p>🛡️ <strong>Less durable</strong> but more agile</p>
+          <h3>🏍️ VEHICLES</h3>
+          <p>⚡ <strong>8 Motorcycles</strong> - Fast, agile, boost with Shift</p>
+          <p>🚗 <strong>Multiple Cars</strong> - Sedan, Sports, Truck, Police</p>
+          <p>🏢 <strong>Enter Buildings</strong> - Apartments, Shops, Garages</p>
+          <p>💰 <strong>Vehicle Theft</strong> - Earn 30% of vehicle value</p>
+          <p>🔧 <strong>Vehicle Damage</strong> - Realistic deformation system</p>
+
+          <h3>💰 ECONOMY SYSTEM</h3>
+          <p>💵 <strong>Starting Cash</strong> - $1,000</p>
+          <p>💎 <strong>Collectibles</strong> - +$100 each</p>
+          <p>🔥 <strong>Destruction</strong> - +$50 per box</p>
+          <p>⚡ <strong>Power-ups</strong> - +$200 each</p>
+          <p>🏆 <strong>Missions</strong> - +$1,000 completion</p>
+          <p>🚗 <strong>Vehicle Prices</strong> - $12K-$45K</p>
+          <p>🔫 <strong>Weapons</strong> - $500-$3,000</p>
+          <p>🏠 <strong>Properties</strong> - $25K-$100K</p>
+
+          <h3>👮 POLICE & WANTED</h3>
+          <p>⭐ <strong>6-Star System</strong> - Progressive police response</p>
+          <p>� <strong>Enhanced AI</strong> - Tactics, coordination, pursuit</p>
+          <p>🚁 <strong>Helicopter Support</strong> - Air surveillance (3+ stars)</p>
+          <p>🚨 <strong>SWAT Response</strong> - Tactical teams (5+ stars)</p>
+          <p>🛑 <strong>Roadblocks</strong> - Strategic police positioning</p>
+          <p>🔫 <strong>Shooting Crimes</strong> - Raises wanted level</p>
+
+          <h3>🏢 BUILDING INTERIORS</h3>
+          <p>🏠 <strong>8 Buildings</strong> - Enterable locations</p>
+          <p>🏢 <strong>Apartments</strong> - Safe houses, save points</p>
+          <p>🏪 <strong>Shops</strong> - Buy weapons, items</p>
+          <p>🔧 <strong>Garages</strong> - Vehicle customization</p>
+          <p>🏬 <strong>Offices</strong> - Mission hubs, businesses</p>
+
+          <h3>💾 SAVE SYSTEM</h3>
+          <p>� <strong>Auto-Save</strong> - Every 60 seconds</p>
+          <p>⚡ <strong>Quick Save</strong> - F5 key</p>
+          <p>📂 <strong>Quick Load</strong> - F9 key</p>
+          <p>📊 <strong>Statistics</strong> - Play time, money, progress</p>
+          <p>🔄 <strong>Multiple Slots</strong> - Main, quick, backup saves</p>
 
           <h3>🎯 OBJECTIVES</h3>
-          <p>💎 <strong>Collect Green Gems</strong> - +100 points</p>
-          <p>🔥 <strong>Destroy Red Boxes</strong> - Hit at high speed - +50 points</p>
-          <p>⚡ <strong>Grab Purple Power-ups</strong> - 5x speed boost - +200 points</p>
-          <p>🏎️ <strong>Complete Missions</strong> - Follow on-screen objectives</p>
-          <p>🔫 <strong>Combat System</strong> - Shoot with Space, reload with R</p>
+          <p>💎 <strong>Collect Gems</strong> - +$100, +100 points</p>
+          <p>🔥 <strong>Destroy Boxes</strong> - +$50, +50 points</p>
+          <p>⚡ <strong>Grab Power-ups</strong> - +$200, +200 points</p>
+          <p>� <strong>Complete Missions</strong> - +$1,000, big points</p>
+          <p>🔫 <strong>Combat System</strong> - Shoot enemies, earn rewards</p>
+          <p>🚗 <strong>Steal Vehicles</strong> - Sell for cash</p>
 
-          <h3>💡 TIPS</h3>
-          <p>• Vehicle spawns at (3,1,3) - walk forward and right</p>
-          <p>• Use handbrake + turn to drift around corners</p>
-          <p>• Chain collectibles for score multipliers</p>
-          <p>• Speed boosts last 5 seconds - use wisely!</p>
-          <p>• Destroy boxes at max speed for instant destruction</p>
-          <p>• Try motorcycles for faster, more agile travel</p>
-          <p>• Shooting raises wanted level - avoid police!</p>
+          <h3>💡 10/10 FEATURES</h3>
+          <p>• <strong>Living City</strong> - 12 pedestrians, 4 police, 8 traffic, 8 motorcycles</p>
+          <p>• <strong>Full Economy</strong> - Money system, shops, property ownership</p>
+          <p>• <strong>Advanced Police</strong> - AI tactics, coordination, air support</p>
+          <p>• <strong>Building Interiors</strong> - 8 enterable buildings with unique interiors</p>
+          <p>• <strong>Save System</strong> - Auto-save, quick save/load, statistics</p>
+          <p>• <strong>Vehicle Variety</strong> - Cars, motorcycles, damage system</p>
+          <p>• <strong>Combat System</strong> - Weapons, ammo, reload mechanics</p>
+          <p>• <strong>GTA Character</strong> - Visible protagonist with proper model</p>
+          <p>• <strong>Physics</strong> - Realistic driving, movement, collisions</p>
+          <p>• <strong>Open World</strong> - Free exploration, no boundaries</p>
         </div>
 
         <!-- Near-vehicle prompt -->

@@ -5,7 +5,7 @@ import { Sound } from './Sound';
 
 export class Police {
     private scene: THREE.Scene;
-    private vehicle: Vehicle;
+    public vehicle: Vehicle;
     private targetPlayer: THREE.Vector3;
     private aggressiveMode = false;
     private sirenTimer = 0;

@@ -169,6 +169,22 @@ export class Sound {
         osc.stop(this.ctx.currentTime + 0.1);
     }
 
+    public playPowerUp() {
+        this.ensureAudioContext();
+        if (!this.ctx || !this.masterGain) return;
+        const g = this.ctx.createGain();
+        g.gain.value = 0.3;
+        g.connect(this.masterGain);
+        
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1600, this.ctx.currentTime + 0.2);
+        osc.connect(g);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.2);
+    }
+
     public playExplosion() {
         this.ensureAudioContext();
         if (!this.ctx || !this.masterGain) return;

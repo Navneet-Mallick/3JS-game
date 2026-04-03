@@ -35,6 +35,12 @@ export class Core {
     private police: Police[] = [];
     private motorcycles: IVehicle[] = [];
     private wantedLevel: WantedLevel;
+    private buildingInteriors: BuildingInterior[] = [];
+    private moneySystem: MoneySystem;
+    private enhancedPoliceAI: EnhancedPoliceAI[] = [];
+    private saveSystem: SaveSystem;
+    private isPlayerInInterior = false;
+    private currentInterior: BuildingInterior | null = null;
     private minimap: Minimap;
     private sound: Sound;
     private missions: MissionSystem;
@@ -48,6 +54,7 @@ export class Core {
     private gearEl      = document.getElementById('gear-value');
     private speedoEl    = document.getElementById('speedo-value');
     private ammoEl      = document.getElementById('ammo-display');
+    private moneyEl     = document.getElementById('money-display');
     private lockPrompt  = document.getElementById('pointer-lock-prompt');
     private pauseScreen = document.getElementById('pause-screen');
     private enterPrompt = document.getElementById('enter-prompt');
@@ -94,9 +101,13 @@ export class Core {
             
             // Initialize GTA-style systems
             this.wantedLevel = new WantedLevel(this.scene.getScene());
+            this.moneySystem = new MoneySystem();
+            this.saveSystem = new SaveSystem();
             this.spawnPedestrians();
             this.spawnPolice();
             this.spawnMotorcycles();
+            this.spawnBuildingInteriors();
+            this.initializeEnhancedPoliceAI();
 
             document.addEventListener('pointerlockchange', () => {
                 const locked = !!document.pointerLockElement;
@@ -211,6 +222,40 @@ export class Core {
         });
     }
 
+    private spawnBuildingInteriors() {
+        const buildingPositions: [number, number, number, string][] = [
+            [20, 1, 20, 'apartment'],
+            [-20, 1, 20, 'shop'],
+            [20, 1, -20, 'garage'],
+            [-20, 1, -20, 'office'],
+            [40, 1, 0, 'apartment'],
+            [-40, 1, 0, 'shop'],
+            [0, 1, 40, 'garage'],
+            [0, 1, -40, 'office']
+        ];
+
+        buildingPositions.forEach(([x, y, z, type]) => {
+            const building = new BuildingInterior(
+                this.scene.getScene(),
+                this.physics.getWorld(),
+                new THREE.Vector3(x, y, z),
+                type as 'apartment' | 'shop' | 'garage' | 'office'
+            );
+            this.buildingInteriors.push(building);
+        });
+    }
+
+    private initializeEnhancedPoliceAI() {
+        // Upgrade existing police to enhanced AI
+        this.police.forEach((police, index) => {
+            const enhancedAI = new EnhancedPoliceAI(
+                police.vehicle,
+                this.wantedLevel.getCurrentLevel()
+            );
+            this.enhancedPoliceAI.push(enhancedAI);
+        });
+    }
+
     private handleEnterExit() {
         const enterKey = Input.isKeyPressed('f') ||
             (GamepadInput.connected && GamepadInput.btnXPressed()) ||
@@ -219,7 +264,7 @@ export class Core {
         if (!enterKey) return;
 
         if (this.playerInVehicle) {
-            this.player.setInVehicle(true);
+            this.player.setInVehicle(false);
             this.playerInVehicle = false;
             this.vehicle.isOccupied = false;
             this.vehicle.chassisMesh.visible = true;
@@ -274,6 +319,7 @@ export class Core {
                 collectible.userData.collected = true;
                 collectible.visible = false;
                 this.score.add(100, 'COLLECTIBLE');
+                this.moneySystem.addReward('collectible');
                 this.sound.playPickup();
             }
             
@@ -321,22 +367,6 @@ export class Core {
             }
         });
         
-        // Check for pedestrian collisions (crimes)
-        this.pedestrians.forEach(pedestrian => {
-            if (!pedestrian.isAliveStatus()) return;
-            
-            const distance = playerPos.distanceTo(pedestrian.getPosition());
-            const currentVelocity = this.playerInVehicle ? 
-                this.vehicle.getSpeedKmh() : 
-                (this.player.body ? Math.sqrt(this.player.body.velocity.x ** 2 + this.player.body.velocity.z ** 2) * 10 : 0);
-            
-            if (distance < 2 && currentVelocity > 10) {
-                pedestrian.takeDamage(100);
-                this.wantedLevel.addCrime('violent');
-                this.score.add(-200, 'ASSAULT'); // Negative score for crimes
-            }
-        });
-        
         // Handle power-ups
         const powerUps = this.city.getPowerUps();
         powerUps.forEach((powerUp, index) => {
@@ -350,6 +380,7 @@ export class Core {
                 // Apply power-up effect
                 if (powerUp.userData.powerType === 'speed') {
                     this.score.add(200, 'POWERUP');
+                    this.moneySystem.addReward('powerup');
                     this.sound.playPickup();
                     
                     // Boost vehicle speed if in vehicle
@@ -390,7 +421,21 @@ export class Core {
         this.pedestrians.forEach(p => p.update(dt, playerPos));
         this.police.forEach(p => p.update(dt, playerPos, this.playerInVehicle, this.wantedLevel.getCurrentLevel()));
         this.motorcycles.forEach(m => m.update(dt));
+        this.enhancedPoliceAI.forEach((ai, index) => {
+            if (this.police[index]) {
+                const playerVelocity = new THREE.Vector3(
+                    this.player.body.velocity.x,
+                    this.player.body.velocity.y,
+                    this.player.body.velocity.z
+                );
+                ai.update(dt, playerPos, playerVelocity, this.wantedLevel.getCurrentLevel(), this.enhancedPoliceAI);
+            }
+        });
         this.wantedLevel.update(dt);
+        
+        // Update save system
+        this.saveSystem.updatePlayTime(dt);
+        this.saveSystem.updateHighestWantedLevel(this.wantedLevel.getCurrentLevel());
         
         // Handle interactions
         this.handleInteractions();
@@ -398,10 +443,22 @@ export class Core {
         // Score — drift + air time
         if (this.playerInVehicle) {
             this.score.updateDrift(this.vehicle.lateralSpeed, dt);
+            const distance = this.vehicle.getSpeedKmh() * dt / 3.6; // km/h to m/s
+            this.saveSystem.addDistanceTraveled(distance);
         } else {
             this.score.updateAir(false, dt);
+            const distance = Math.sqrt(
+                this.player.body.velocity.x ** 2 + 
+                this.player.body.velocity.z ** 2
+            ) * dt;
+            this.saveSystem.addDistanceTraveled(distance);
         }
         this.score.updateMultiplier(dt);
+
+        // Update money display
+        if (this.moneyEl) {
+            this.moneyEl.textContent = `$${this.moneySystem.getCurrentMoney().toLocaleString()}`;
+        }
 
         // Mission update
         const pos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
