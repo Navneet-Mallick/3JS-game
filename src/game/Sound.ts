@@ -177,9 +177,15 @@ export class Sound {
     private startSongLoop(station: any) {
         if (!this.ctx || !this.bgmGain) return;
         
+        // Clear any existing interval
+        if ((this as any).songLoopInterval) {
+            clearInterval((this as any).songLoopInterval);
+            (this as any).songLoopInterval = null;
+        }
+        
         const songDuration = 4; // 4 seconds per loop
         const loopInterval = setInterval(() => {
-            if (!this.isRadioOn) {
+            if (!this.isRadioOn || !(this as any).songLoopInterval) {
                 clearInterval(loopInterval);
                 return;
             }

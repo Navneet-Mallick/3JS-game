@@ -6,6 +6,7 @@ export class GameScene {
     private camera: THREE.PerspectiveCamera;
     private renderer: THREE.WebGLRenderer;
     private composer: EffectComposer;
+    private timer: THREE.Timer;
 
     constructor() {
         this.scene = new THREE.Scene();
