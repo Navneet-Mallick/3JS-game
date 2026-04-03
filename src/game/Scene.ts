@@ -56,7 +56,7 @@ export class GameScene {
 
         const bloom = new UnrealBloomPass(
             new THREE.Vector2(window.innerWidth, window.innerHeight),
-            0.8, 0.3, 0.9
+            0.3, 0.2, 0.6
         );
         this.composer.addPass(bloom);
 

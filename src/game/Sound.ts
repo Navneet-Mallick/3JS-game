@@ -13,6 +13,13 @@ export class Sound {
     private muted = false;
 
     public init() {
+        // AudioContext will be created on first user interaction
+        this.createAudioContext();
+    }
+
+    private createAudioContext() {
+        if (this.ctx) return;
+        
         try {
             this.ctx = new AudioContext();
             this.masterGain = this.ctx.createGain();
@@ -21,6 +28,15 @@ export class Sound {
             this.startAmbient();
         } catch {
             // Web Audio not available
+        }
+    }
+
+    public ensureAudioContext() {
+        if (!this.ctx) {
+            this.createAudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
         }
     }
 
@@ -138,6 +154,7 @@ export class Sound {
     }
 
     public playPickup() {
+        this.ensureAudioContext();
         if (!this.ctx || !this.masterGain) return;
         const g = this.ctx.createGain();
         g.gain.value = 0.3;
@@ -153,6 +170,7 @@ export class Sound {
     }
 
     public playExplosion() {
+        this.ensureAudioContext();
         if (!this.ctx || !this.masterGain) return;
         const g = this.ctx.createGain();
         g.gain.value = 0.4;

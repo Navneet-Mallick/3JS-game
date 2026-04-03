@@ -44,7 +44,7 @@ export class Vehicle {
         this.camera = camera;
 
         const chassisShape = new CANNON.Box(new CANNON.Vec3(1.0, 0.3, 2.2));
-        this.chassisBody = new CANNON.Body({ mass: 1400, shape: chassisShape });
+        this.chassisBody = new CANNON.Body({ mass: 800, shape: chassisShape });
         this.chassisBody.position.copy(position);
         this.chassisBody.linearDamping  = 0.02;
         this.chassisBody.angularDamping = 0.35;
@@ -63,9 +63,9 @@ export class Vehicle {
         const base = {
             radius: 0.38,
             directionLocal: new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness: 55,
-            suspensionRestLength: 0.35,
-            frictionSlip: 2.8,
+            suspensionStiffness: 35,
+            suspensionRestLength: 0.5,
+            frictionSlip: 10.5,
             dampingRelaxation: 2.8,
             dampingCompression: 5.0,
             maxSuspensionForce: 120000,
@@ -91,8 +91,8 @@ export class Vehicle {
         const g = new THREE.Group();
 
         const paint = new THREE.MeshPhysicalMaterial({
-            color: 0x0a0a1a, roughness: 0.12, metalness: 0.92,
-            clearcoat: 1.0, clearcoatRoughness: 0.04,
+            color: 0x2a4d8f, roughness: 0.2, metalness: 0.9,
+            clearcoat: 1.0, clearcoatRoughness: 0.1
         });
         const glass = new THREE.MeshPhysicalMaterial({
             color: 0x001830, roughness: 0.0, metalness: 0.05,

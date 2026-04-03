@@ -19,8 +19,8 @@ export class City {
     private collectibles: THREE.Mesh[] = [];
     private destructibles: { mesh: THREE.Mesh; body: CANNON.Body; health: number }[] = [];
 
-    constructor(scene: THREE.Scene, world: CANNON.World) {
-        this.buildGround(scene, world);
+    constructor(scene: THREE.Scene, world: CANNON.World, groundMaterial: CANNON.Material) {
+        this.buildGround(scene, world, groundMaterial);
         this.buildRoads(scene);
         this.buildBlocks(scene, world);
         this.buildStreetLights(scene);
@@ -31,21 +31,25 @@ export class City {
     public getCollectibles() { return this.collectibles; }
     public getDestructibles() { return this.destructibles; }
 
-    private buildGround(scene: THREE.Scene, world: CANNON.World) {
+    private buildGround(scene: THREE.Scene, world: CANNON.World, groundMaterial: CANNON.Material) {
         const mesh = new THREE.Mesh(
             new THREE.PlaneGeometry(2000, 2000),
-            new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 1.0 })
+            new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.8 })
         );
         mesh.rotation.x = -Math.PI / 2;
         mesh.receiveShadow = true;
         scene.add(mesh);
-        const body = new CANNON.Body({ type: CANNON.Body.STATIC, shape: new CANNON.Plane() });
+        const body = new CANNON.Body({ 
+            type: CANNON.Body.STATIC, 
+            shape: new CANNON.Plane(),
+            material: groundMaterial 
+        });
         body.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
         world.addBody(body);
     }
 
     private buildRoads(scene: THREE.Scene) {
-        const roadMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95 });
+        const roadMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.8 });
         const dashMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0xffcc00, emissiveIntensity: 0.3 });
         const edgeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.15 });
         const half = ((EXTENT * 2 + 1) * STEP) / 2 + ROAD;

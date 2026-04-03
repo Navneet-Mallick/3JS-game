@@ -1,5 +1,4 @@
 import * as CANNON from 'cannon-es';
-import * as THREE from 'three';
 import { GameScene } from './Scene';
 import { Physics } from './Physics';
 import { Player } from './Player';
@@ -47,14 +46,14 @@ export class Core {
             this.scene   = new GameScene();
             this.physics = new Physics();
 
-            this.city = new City(this.scene.getScene(), this.physics.getWorld());
+            this.city = new City(this.scene.getScene(), this.physics.getWorld(), this.physics.groundMaterial);
 
             this.player  = new Player(this.scene.getScene(), this.physics.getWorld(), this.scene.getCamera());
             this.vehicle = new Vehicle(
                 this.scene.getScene(),
                 this.physics.getWorld(),
                 this.scene.getCamera(),
-                new CANNON.Vec3(8, 2, 8),
+                new CANNON.Vec3(3, 1, 3),
                 this.sound
             );
 
@@ -80,6 +79,7 @@ export class Core {
             document.addEventListener('pointerlockchange', () => {
                 const locked = !!document.pointerLockElement;
                 if (locked) {
+                    this.sound.ensureAudioContext();
                     this.sound.resume();
                     if (this.lockPrompt)  this.lockPrompt.style.display = 'none';
                     if (this.pauseScreen) this.pauseScreen.classList.remove('visible');
@@ -174,7 +174,7 @@ export class Core {
         // Handle collectibles
         const collectibles = this.city.getCollectibles();
         collectibles.forEach((collectible, index) => {
-            if (collectible.userData.collected) return;
+            if (!collectible.userData || collectible.userData.collected) return;
             
             const distance = playerPos.distanceTo(collectible.position);
             if (distance < 3) {
@@ -185,7 +185,7 @@ export class Core {
             }
             
             // Animate collectibles
-            if (!collectible.userData.collected) {
+            if (!collectible.userData.collected && collectible.userData.rotationSpeed) {
                 collectible.rotation.y += collectible.userData.rotationSpeed;
                 collectible.position.y = 1 + Math.sin(Date.now() * 0.002 + index) * 0.2;
             }
@@ -194,10 +194,12 @@ export class Core {
         // Handle destructibles
         const destructibles = this.city.getDestructibles();
         destructibles.forEach((destructible) => {
+            if (!destructible.mesh || !destructible.body) return;
+            
             const distance = playerPos.distanceTo(destructible.mesh.position);
             const velocity = this.playerInVehicle ? 
                 this.vehicle.getSpeedKmh() : 
-                Math.sqrt(this.player.body.velocity.x ** 2 + this.player.body.velocity.z ** 2) * 10;
+                (this.player.body ? Math.sqrt(this.player.body.velocity.x ** 2 + this.player.body.velocity.z ** 2) * 10 : 0);
             
             if (distance < 4 && velocity > 20) {
                 destructible.health -= velocity * 0.5;
@@ -210,13 +212,15 @@ export class Core {
                     this.sound.playExplosion();
                 } else {
                     // Damage effect
-                    const material = Array.isArray(destructible.mesh.material) 
-                        ? destructible.mesh.material[0] as THREE.MeshStandardMaterial
-                        : destructible.mesh.material as THREE.MeshStandardMaterial;
-                    material.color.setHex(0xff8888);
-                    setTimeout(() => {
-                        material.color.setHex(0xff4444);
-                    }, 100);
+                    const material = destructible.mesh.material as THREE.MeshStandardMaterial;
+                    if (material && material.color) {
+                        material.color.setHex(0xff8888);
+                        setTimeout(() => {
+                            if (material.color) {
+                                material.color.setHex(0xff4444);
+                            }
+                        }, 100);
+                    }
                 }
             }
         });
