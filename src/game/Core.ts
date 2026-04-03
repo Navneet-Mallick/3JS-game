@@ -23,6 +23,8 @@ import { BuildingInterior } from './BuildingInterior';
 import { MoneySystem } from './MoneySystem';
 import { EnhancedPoliceAI } from './EnhancedPoliceAI';
 import { SaveSystem } from './SaveSystem';
+import { MainMenu } from './MainMenu';
+import { PauseMenu } from './PauseMenu';
 
 export class Core {
     private scene: GameScene;
@@ -42,6 +44,9 @@ export class Core {
     private isPlayerInInterior = false;
     private currentInterior: BuildingInterior | null = null;
     private minimap: Minimap;
+    private mainMenu: MainMenu;
+    private pauseMenu: PauseMenu;
+    private gameStarted: boolean = false;
     private sound: Sound;
     private missions: MissionSystem;
     private score: ScoreSystem;
@@ -100,7 +105,24 @@ export class Core {
             this.missions = new MissionSystem(this.scene.getScene());
             this.score    = new ScoreSystem();
             
-            // Initialize GTA-style systems
+            // Initialize menu systems
+            this.mainMenu = new MainMenu(
+                () => this.startGame(),
+                () => this.openSettings(),
+                () => this.exitGame()
+            );
+            
+            this.pauseMenu = new PauseMenu(
+                () => this.resumeGame(),
+                () => this.openSettings(),
+                () => this.returnToMainMenu(),
+                () => this.exitGame()
+            );
+
+            // Show main menu initially
+            this.mainMenu.show();
+
+            // Initialize GTA-style systems (but don't start game yet)
             this.wantedLevel = new WantedLevel(this.scene.getScene());
             this.moneySystem = new MoneySystem();
             this.saveSystem = new SaveSystem();
@@ -280,38 +302,100 @@ export class Core {
             console.log('Quick loaded!');
         }
         
+        // Pause menu (ESC)
+        if (Input.isKeyPressed('Escape') && this.gameStarted) {
+            if (!this.mainMenu.isMenuVisible()) {
+                this.togglePause();
+            }
+        }
+        
         // Radio controls (use different keys to avoid conflicts)
         // Radio station next (Page Up)
-        if (Input.isKeyPressed('PageUp')) {
+        if (Input.isKeyPressed('PageUp') && this.gameStarted && !this.pauseMenu.isPaused()) {
             this.sound.nextRadioStation();
             const station = this.sound.getCurrentStation();
             console.log(`🎵 Radio: ${station.name}`);
         }
         
         // Radio station previous (Page Down)
-        if (Input.isKeyPressed('PageDown')) {
+        if (Input.isKeyPressed('PageDown') && this.gameStarted && !this.pauseMenu.isPaused()) {
             this.sound.previousRadioStation();
             const station = this.sound.getCurrentStation();
             console.log(`🎵 Radio: ${station.name}`);
         }
         
         // Radio toggle (Home)
-        if (Input.isKeyPressed('Home')) {
+        if (Input.isKeyPressed('Home') && this.gameStarted && !this.pauseMenu.isPaused()) {
             this.sound.toggleRadio();
         }
         
         // Radio volume up (End + Shift)
-        if (Input.isKeyPressed('End') && Input.isKeyDown('Shift')) {
+        if (Input.isKeyPressed('End') && Input.isKeyDown('Shift') && this.gameStarted && !this.pauseMenu.isPaused()) {
             const currentVolume = this.sound.getRadioVolume();
             this.sound.setRadioVolume(Math.min(1, currentVolume + 0.1));
             console.log(`🔊 Radio Volume: ${Math.round(this.sound.getRadioVolume() * 100)}%`);
         }
         
         // Radio volume down (End + Ctrl)
-        if (Input.isKeyPressed('End') && Input.isKeyDown('Control')) {
+        if (Input.isKeyPressed('End') && Input.isKeyDown('Control') && this.gameStarted && !this.pauseMenu.isPaused()) {
             const currentVolume = this.sound.getRadioVolume();
             this.sound.setRadioVolume(Math.max(0, currentVolume - 0.1));
             console.log(`🔊 Radio Volume: ${Math.round(this.sound.getRadioVolume() * 100)}%`);
+        }
+    }
+
+    // Menu system methods
+    private startGame() {
+        this.gameStarted = true;
+        this.mainMenu.hide();
+        this.sound.ensureAudioContext();
+        this.sound.resume();
+        console.log('🎮 Game Started!');
+    }
+
+    private resumeGame() {
+        this.pauseMenu.hide();
+        this.paused = false;
+        this.sound.resume();
+        console.log('▶️ Game Resumed');
+    }
+
+    private togglePause() {
+        if (this.paused) {
+            this.resumeGame();
+        } else {
+            this.paused = true;
+            const gameStats = {
+                money: this.moneySystem.getCurrentMoney(),
+                score: this.score.getScore(),
+                wantedLevel: this.wantedLevel.getCurrentLevel(),
+                playTime: this.saveSystem.getSaveFileInfo().playTime / 1000
+            };
+            this.pauseMenu.show(gameStats);
+            console.log('⏸️ Game Paused');
+        }
+    }
+
+    private openSettings() {
+        console.log('⚙️ Settings opened');
+        // Settings would be implemented here
+    }
+
+    private returnToMainMenu() {
+        this.gameStarted = false;
+        this.pauseMenu.hide();
+        this.mainMenu.show();
+        this.paused = false;
+        console.log('🏠 Returned to Main Menu');
+    }
+
+    private exitGame() {
+        console.log('👋 Exiting game...');
+        // Close window or redirect
+        if (window.confirm('Are you sure you want to exit Neo-Noir City?')) {
+            window.close();
+            // Fallback for browsers that can't close windows
+            window.location.href = 'about:blank';
         }
     }
 
@@ -461,6 +545,12 @@ export class Core {
 
     private animate(time: number) {
         requestAnimationFrame((t) => this.animate(t));
+
+        // Don't run game logic if main menu is visible or game hasn't started
+        if (this.mainMenu.isMenuVisible() || !this.gameStarted) {
+            this.scene.render();
+            return;
+        }
 
         if (this.paused) return;
 
