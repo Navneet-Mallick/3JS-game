@@ -1,7 +1,21 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Vehicle } from './Vehicle';
+import { Motorcycle } from './Motorcycle';
 import { Sound } from './Sound';
+
+// Common interface for all vehicles
+export interface IVehicle {
+    update(dt: number): void;
+    getPosition(): THREE.Vector3;
+    getSpeedKmh(): number;
+    isOccupied: boolean;
+    chassisMesh: THREE.Group;
+    chassisBody: CANNON.Body;
+    applyDamage(damage: number, impactPoint?: THREE.Vector3, impactForce?: number): boolean;
+    getDamageLevel(): string;
+    getHealthPercent(): number;
+}
 
 export const VehicleType = {
     SEDAN: 'sedan',
@@ -108,7 +122,7 @@ export class VehicleFactory {
         camera: THREE.PerspectiveCamera,
         position: CANNON.Vec3,
         sound: Sound
-    ): Vehicle {
+    ): IVehicle {
         const config = this.VEHICLE_CONFIGS.get(type);
         if (!config) {
             throw new Error(`Unknown vehicle type: ${type}`);
@@ -180,17 +194,24 @@ export class VehicleFactory {
         position: CANNON.Vec3,
         sound: Sound,
         config: VehicleConfig
-    ): Vehicle {
-        // For now, return a regular vehicle but with motorcycle properties
-        const vehicle = new Vehicle(scene, world, camera, position, sound);
+    ): Motorcycle {
+        // Create actual motorcycle instance
+        const motorcycle = new Motorcycle(scene, world, camera, position, sound);
         
-        // Customize for motorcycle (would need special model)
-        this.customizeVehicle(vehicle, config, {
-            motorcycle: true,
-            engineSound: 'bike'
+        // Customize motorcycle appearance based on config
+        const chassisMesh = (motorcycle as any).chassisMesh;
+        chassisMesh.traverse((child: THREE.Mesh) => {
+            if (child instanceof THREE.Mesh && child.material) {
+                const material = child.material as THREE.MeshStandardMaterial;
+                
+                // Apply custom color if not police/ambulance
+                if (config.type !== VehicleType.POLICE && config.type !== VehicleType.AMBULANCE) {
+                    material.color.setHex(config.color);
+                }
+            }
         });
         
-        return vehicle;
+        return motorcycle;
     }
 
     private static createPoliceCar(

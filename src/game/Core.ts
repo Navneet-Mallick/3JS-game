@@ -16,6 +16,13 @@ import { TouchControls } from './TouchControls';
 import { Pedestrian } from './Pedestrian';
 import { Police } from './Police';
 import { WantedLevel } from './WantedLevel';
+import { VehicleFactory, VehicleType } from './VehicleFactory';
+import type { IVehicle } from './VehicleFactory';
+import { Motorcycle } from './Motorcycle';
+import { BuildingInterior } from './BuildingInterior';
+import { MoneySystem } from './MoneySystem';
+import { EnhancedPoliceAI } from './EnhancedPoliceAI';
+import { SaveSystem } from './SaveSystem';
 
 export class Core {
     private scene: GameScene;
@@ -26,6 +33,7 @@ export class Core {
     private traffic: TrafficCar[] = [];
     private pedestrians: Pedestrian[] = [];
     private police: Police[] = [];
+    private motorcycles: IVehicle[] = [];
     private wantedLevel: WantedLevel;
     private minimap: Minimap;
     private sound: Sound;
@@ -88,6 +96,7 @@ export class Core {
             this.wantedLevel = new WantedLevel(this.scene.getScene());
             this.spawnPedestrians();
             this.spawnPolice();
+            this.spawnMotorcycles();
 
             document.addEventListener('pointerlockchange', () => {
                 const locked = !!document.pointerLockElement;
@@ -180,6 +189,25 @@ export class Core {
                 new CANNON.Vec3(x, y, z),
                 this.sound
             ));
+        });
+    }
+
+    private spawnMotorcycles() {
+        const motorcyclePositions: [number, number, number][] = [
+            [15, 1, 15], [-15, 1, 15], [15, 1, -15], [-15, 1, -15],
+            [25, 1, 0], [-25, 1, 0], [0, 1, 25], [0, 1, -25]
+        ];
+
+        motorcyclePositions.forEach(([x, y, z]) => {
+            const motorcycle = VehicleFactory.createVehicle(
+                VehicleType.MOTORCYCLE,
+                this.scene.getScene(),
+                this.physics.getWorld(),
+                this.scene.getCamera(),
+                new CANNON.Vec3(x, y, z),
+                this.sound
+            );
+            this.motorcycles.push(motorcycle);
         });
     }
 
@@ -361,6 +389,7 @@ export class Core {
         const playerPos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
         this.pedestrians.forEach(p => p.update(dt, playerPos));
         this.police.forEach(p => p.update(dt, playerPos, this.playerInVehicle, this.wantedLevel.getCurrentLevel()));
+        this.motorcycles.forEach(m => m.update(dt));
         this.wantedLevel.update(dt);
         
         // Handle interactions
@@ -380,8 +409,8 @@ export class Core {
         if (reward > 0) this.score.add(reward, 'MISSION');
 
         // Speedometer + gear
-        if (this.playerInVehicle && this.speedVal) {
-            this.speedVal.textContent = String(this.vehicle.getSpeedKmh());
+        if (this.playerInVehicle && this.speedoEl) {
+            this.speedoEl.textContent = String(this.vehicle.getSpeedKmh());
             const gearEl = document.getElementById('gear-value');
             if (gearEl) gearEl.textContent = `G${this.vehicle.getGear()}`;
         }
