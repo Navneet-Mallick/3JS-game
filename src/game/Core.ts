@@ -195,9 +195,11 @@ export class Core {
         const reward = this.missions.update(dt, pos);
         if (reward > 0) this.score.add(reward, 'MISSION');
 
-        // Speedometer
+        // Speedometer + gear
         if (this.playerInVehicle && this.speedVal) {
             this.speedVal.textContent = String(this.vehicle.getSpeedKmh());
+            const gearEl = document.getElementById('gear-value');
+            if (gearEl) gearEl.textContent = `G${this.vehicle.getGear()}`;
         }
 
         // Near-vehicle prompt
