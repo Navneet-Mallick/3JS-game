@@ -11,6 +11,7 @@
   </head>
   <body>
     <div id="app">
+
       <!-- Loading Screen -->
       <div id="loading-screen">
         <h1 class="loader-text">Neo-Noir City</h1>
@@ -19,13 +20,13 @@
         </div>
       </div>
 
-      <!-- Pointer Lock Prompt (hidden until loading done) -->
+      <!-- Pointer Lock Prompt -->
       <div id="lock-prompt" style="display:none">
         <h2>Click to Play</h2>
-        <p>Mouse to look &nbsp;·&nbsp; WASD to move &nbsp;·&nbsp; F to enter car</p>
+        <p>Mouse to look &nbsp;·&nbsp; WASD to move &nbsp;·&nbsp; F to enter car &nbsp;·&nbsp; M to mute</p>
       </div>
 
-      <!-- Pause Screen (shown when Escape pressed mid-game) -->
+      <!-- Pause Screen -->
       <div id="pause-screen">
         <h2>Paused</h2>
         <p>Click to resume</p>
@@ -35,28 +36,51 @@
       <div class="game-ui">
         <div class="crosshair"></div>
 
+        <!-- Top HUD -->
         <div class="hud-top">
           <div class="hud-badge" id="mode-badge">On Foot</div>
         </div>
 
-        <div class="vehicle-indicator" id="vehicle-indicator">In Vehicle</div>
+        <!-- Score -->
+        <div class="score-hud">
+          <div class="score-label">SCORE</div>
+          <div id="score-value">0</div>
+          <div id="multiplier-value" class="multiplier">x1</div>
+        </div>
 
-        <!-- Speedometer (visible while driving) -->
+        <!-- Combo flash -->
+        <div id="combo-text" class="combo-text"></div>
+
+        <!-- Mission panel -->
+        <div id="mission-panel" style="display:none">
+          <div id="mission-title" class="mission-title">MISSION</div>
+          <div id="mission-desc"  class="mission-desc">...</div>
+          <div id="mission-dist"  class="mission-stat" style="display:none">0m</div>
+          <div id="mission-timer" class="mission-stat" style="display:none">0s</div>
+        </div>
+
+        <!-- Mission complete flash -->
+        <div id="mission-flash" class="mission-flash"></div>
+
+        <!-- Speedometer -->
         <div class="speedometer" id="speedometer">
           <span id="speed-value">0</span>
           <span class="speed-unit">km/h</span>
         </div>
 
+        <!-- Minimap -->
         <div class="minimap-container">
           <canvas id="minimap-canvas"></canvas>
         </div>
 
+        <!-- Instructions -->
         <div class="instructions">
           <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move / Drive</p>
           <p><kbd>Space</kbd> Jump / Handbrake</p>
           <p><kbd>Shift</kbd> Sprint</p>
           <p><kbd>F</kbd> Enter / Exit Car</p>
           <p><kbd>V</kbd> Camera View</p>
+          <p><kbd>M</kbd> Mute</p>
         </div>
 
         <!-- Near-vehicle prompt -->

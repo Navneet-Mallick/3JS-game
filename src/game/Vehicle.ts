@@ -1,6 +1,8 @@
 ﻿import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Input } from './Input';
+import { GamepadInput } from './Gamepad';
+import { Sound } from './Sound';
 
 export class Vehicle {
     private scene: THREE.Scene;
@@ -19,14 +21,26 @@ export class Vehicle {
     private readonly CAM_DIST = 12;
     private mouseIdleTimer = 0;
 
-    constructor(scene: THREE.Scene, world: CANNON.World, camera: THREE.PerspectiveCamera, position: CANNON.Vec3) {
-        this.scene = scene;
+    // Drift tracking for score
+    public lateralSpeed = 0;
+
+    private sound: Sound;
+
+    constructor(
+        scene: THREE.Scene,
+        world: CANNON.World,
+        camera: THREE.PerspectiveCamera,
+        position: CANNON.Vec3,
+        sound: Sound
+    ) {
+        this.sound  = sound;
+        this.scene  = scene;
         this.camera = camera;
 
         const chassisShape = new CANNON.Box(new CANNON.Vec3(1.0, 0.35, 2.2));
         this.chassisBody = new CANNON.Body({ mass: 1200, shape: chassisShape });
         this.chassisBody.position.copy(position);
-        this.chassisBody.linearDamping = 0.05;
+        this.chassisBody.linearDamping  = 0.05;
         this.chassisBody.angularDamping = 0.4;
         world.addBody(this.chassisBody);
 
@@ -57,8 +71,8 @@ export class Vehicle {
         };
 
         const wheelPositions = [
-            [-0.9, -0.3, 1.5],
-            [ 0.9, -0.3, 1.5],
+            [-0.9, -0.3,  1.5],
+            [ 0.9, -0.3,  1.5],
             [-0.9, -0.3, -1.5],
             [ 0.9, -0.3, -1.5],
         ];
@@ -90,31 +104,24 @@ export class Vehicle {
         this.taillightMats.push(tlMat);
 
         const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.55, 4.4), paint);
-        body.castShadow = true;
-        g.add(body);
+        body.castShadow = true; g.add(body);
 
         const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.48, 2.2), glass);
-        cabin.position.set(0, 0.5, -0.15);
-        g.add(cabin);
+        cabin.position.set(0, 0.5, -0.15); g.add(cabin);
 
         const roof = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.06, 2.22), paint);
-        roof.position.set(0, 0.75, -0.15);
-        g.add(roof);
+        roof.position.set(0, 0.75, -0.15); g.add(roof);
 
         const bumperF = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.2, 0.15), paint);
-        bumperF.position.set(0, -0.18, 2.27);
-        g.add(bumperF);
+        bumperF.position.set(0, -0.18, 2.27); g.add(bumperF);
 
         const bumperR = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.2, 0.15), paint);
-        bumperR.position.set(0, -0.18, -2.27);
-        g.add(bumperR);
+        bumperR.position.set(0, -0.18, -2.27); g.add(bumperR);
 
         const hlL = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.14, 0.08), hlMat);
-        hlL.position.set(-0.62, 0.08, 2.24);
-        g.add(hlL);
+        hlL.position.set(-0.62, 0.08, 2.24); g.add(hlL);
         const hlR = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.14, 0.08), hlMat);
-        hlR.position.set(0.62, 0.08, 2.24);
-        g.add(hlR);
+        hlR.position.set(0.62, 0.08, 2.24); g.add(hlR);
 
         [-0.62, 0.62].forEach(x => {
             const spot = new THREE.SpotLight(0xfff5e0, 6, 40, Math.PI / 7, 0.4, 1.5);
@@ -128,11 +135,9 @@ export class Vehicle {
         });
 
         const tlL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.08), tlMat);
-        tlL.position.set(-0.6, 0.1, -2.24);
-        g.add(tlL);
+        tlL.position.set(-0.6, 0.1, -2.24); g.add(tlL);
         const tlR = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.08), tlMat);
-        tlR.position.set(0.6, 0.1, -2.24);
-        g.add(tlR);
+        tlR.position.set(0.6, 0.1, -2.24); g.add(tlR);
 
         const underglow = new THREE.PointLight(0x7000ff, 3, 6);
         underglow.position.set(0, -0.4, 0);
@@ -147,65 +152,75 @@ export class Vehicle {
             new THREE.CylinderGeometry(0.38, 0.38, 0.3, 20),
             new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1.0 })
         );
-        tire.rotation.z = Math.PI / 2;
-        tire.castShadow = true;
-        g.add(tire);
+        tire.rotation.z = Math.PI / 2; tire.castShadow = true; g.add(tire);
 
         const rim = new THREE.Mesh(
             new THREE.CylinderGeometry(0.24, 0.24, 0.32, 10),
             new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.9, roughness: 0.2 })
         );
-        rim.rotation.z = Math.PI / 2;
-        g.add(rim);
-
+        rim.rotation.z = Math.PI / 2; g.add(rim);
         return g;
     }
 
-    public update(_deltaTime: number) {
+    public update(_dt: number) {
         const ENGINE_FORCE = 5000;
         const BRAKE_FORCE  = 120;
-
-        // Speed-dependent steering: less steer at high speed (realistic)
         const spd = this.getSpeedKmh();
         const MAX_STEER = Math.max(0.15, 0.42 - spd * 0.002);
 
         let force = 0, steer = 0, brake = 0;
         let handbrake = false;
+        let throttle  = false;
 
         if (this.isOccupied) {
-            if (Input.isKeyDown('w')) force =  ENGINE_FORCE;
-            if (Input.isKeyDown('s')) force = -ENGINE_FORCE * 0.55;
+            // Keyboard
+            if (Input.isKeyDown('w')) { force =  ENGINE_FORCE; throttle = true; }
+            if (Input.isKeyDown('s')) { force = -ENGINE_FORCE * 0.55; }
             if (Input.isKeyDown('a')) steer =  MAX_STEER;
             if (Input.isKeyDown('d')) steer = -MAX_STEER;
-
-            // Space = handbrake (rear wheels lock → drift)
             handbrake = Input.isKeyDown(' ');
 
-            const braking = Input.isKeyDown('s') || handbrake;
+            // Gamepad
+            if (GamepadInput.connected) {
+                if (GamepadInput.rt > 0.05) { force =  ENGINE_FORCE * GamepadInput.rt; throttle = true; }
+                if (GamepadInput.lt > 0.05)   force = -ENGINE_FORCE * GamepadInput.lt * 0.55;
+                if (Math.abs(GamepadInput.leftX) > 0.05) steer = -GamepadInput.leftX * MAX_STEER;
+                if (GamepadInput.btnLB) handbrake = true;
+            }
+
+            const braking = Input.isKeyDown('s') || handbrake || (GamepadInput.connected && GamepadInput.lt > 0.1);
             this.taillightMats.forEach(m => m.emissiveIntensity = braking ? 8 : 2);
 
+            this.sound.updateEngine(spd, throttle);
             this.updateCamera();
         } else {
             brake = 12;
             this.taillightMats.forEach(m => m.emissiveIntensity = 0.5);
         }
 
+        // Lateral speed for drift scoring
+        const carFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(
+            this.chassisBody.quaternion as unknown as THREE.Quaternion
+        );
+        const vel = new THREE.Vector3(
+            this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z
+        );
+        const fwdSpeed  = vel.dot(carFwd);
+        const latVec    = vel.clone().sub(carFwd.clone().multiplyScalar(fwdSpeed));
+        this.lateralSpeed = latVec.length();
+
         this.vehicle.applyEngineForce(force, 2);
         this.vehicle.applyEngineForce(force, 3);
         this.vehicle.setSteeringValue(steer, 0);
         this.vehicle.setSteeringValue(steer, 1);
 
-        // Handbrake locks rear, normal brake hits all 4
         if (handbrake) {
-            this.vehicle.setBrake(0,   0);
-            this.vehicle.setBrake(0,   1);
+            this.vehicle.setBrake(0, 0);
+            this.vehicle.setBrake(0, 1);
             this.vehicle.setBrake(BRAKE_FORCE * 3, 2);
             this.vehicle.setBrake(BRAKE_FORCE * 3, 3);
         } else {
-            this.vehicle.setBrake(brake, 0);
-            this.vehicle.setBrake(brake, 1);
-            this.vehicle.setBrake(brake, 2);
-            this.vehicle.setBrake(brake, 3);
+            for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i);
         }
 
         this.chassisMesh.position.copy(this.chassisBody.position as unknown as THREE.Vector3);
@@ -223,6 +238,12 @@ export class Vehicle {
         if (Input.isPointerLocked && (Input.movementX !== 0 || Input.movementY !== 0)) {
             this.camYaw   -= Input.movementX * 0.0025;
             this.camPitch -= Input.movementY * 0.0025;
+            this.camPitch  = Math.max(-0.1, Math.min(0.6, this.camPitch));
+            this.mouseIdleTimer = 1.5;
+        }
+        if (GamepadInput.connected && (Math.abs(GamepadInput.rightX) > 0.05 || Math.abs(GamepadInput.rightY) > 0.05)) {
+            this.camYaw   -= GamepadInput.rightX * 0.04;
+            this.camPitch -= GamepadInput.rightY * 0.03;
             this.camPitch  = Math.max(-0.1, Math.min(0.6, this.camPitch));
             this.mouseIdleTimer = 1.5;
         }
@@ -245,11 +266,9 @@ export class Vehicle {
             this.chassisMesh.position.y + 1.2,
             this.chassisMesh.position.z
         );
-
         const cx = target.x + this.CAM_DIST * Math.sin(this.camYaw) * Math.cos(this.camPitch);
         const cy = target.y + this.CAM_DIST * Math.sin(this.camPitch);
         const cz = target.z + this.CAM_DIST * Math.cos(this.camYaw) * Math.cos(this.camPitch);
-
         this.camera.position.lerp(new THREE.Vector3(cx, cy, cz), 0.1);
         this.camera.lookAt(target);
     }
