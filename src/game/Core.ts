@@ -47,7 +47,7 @@ export class Core {
 
             new City(this.scene.getScene(), this.physics.getWorld());
 
-            this.player  = new Player(this.scene.getScene(), this.physics.getWorld(), this.scene.getCamera(), this.sound);
+            this.player  = new Player(this.scene.getScene(), this.physics.getWorld(), this.scene.getCamera());
             this.vehicle = new Vehicle(
                 this.scene.getScene(),
                 this.physics.getWorld(),
@@ -186,7 +186,7 @@ export class Core {
         if (this.playerInVehicle) {
             this.score.updateDrift(this.vehicle.lateralSpeed, dt);
         } else {
-            this.score.updateAir(this.player.isOnGround(), dt);
+            this.score.updateAir(false, dt);
         }
         this.score.updateMultiplier(dt);
 
