@@ -8,7 +8,7 @@ const EXTENT = 3;
 export class Minimap {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
-    private readonly SIZE = 180;
+    private readonly SIZE = 160;
     private readonly SCALE = 0.6; // world units per pixel
 
     constructor(canvasId: string) {
