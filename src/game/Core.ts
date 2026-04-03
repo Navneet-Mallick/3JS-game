@@ -37,10 +37,11 @@ export class Core {
     private paused = false;
 
     private modeBadge   = document.getElementById('mode-badge');
-    private lockPrompt  = document.getElementById('lock-prompt');
+    private gearEl      = document.getElementById('gear-value');
+    private speedoEl    = document.getElementById('speedo-value');
+    private ammoEl      = document.getElementById('ammo-display');
+    private lockPrompt  = document.getElementById('pointer-lock-prompt');
     private pauseScreen = document.getElementById('pause-screen');
-    private speedoEl    = document.getElementById('speedometer');
-    private speedVal    = document.getElementById('speed-value');
     private enterPrompt = document.getElementById('enter-prompt');
 
     constructor() {
@@ -216,6 +217,24 @@ export class Core {
 
     private handleInteractions() {
         const playerPos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
+        
+        // Check for weapon firing
+        if (!this.playerInVehicle) {
+            const weapon = this.player.getWeapon();
+            const ammo = weapon.getAmmo();
+            const maxAmmo = weapon.getMaxAmmo();
+            
+            // Update ammo display
+            if (this.ammoEl) {
+                this.ammoEl.textContent = `${ammo}/${maxAmmo}`;
+                this.ammoEl.style.color = ammo === 0 ? '#ff0000' : '#ffffff';
+            }
+            
+            // Add crime for shooting
+            if (Input.isKeyPressed(' ') && ammo > 0 && !weapon.isReloadingStatus()) {
+                this.wantedLevel.addCrime('violent');
+            }
+        }
         
         // Handle collectibles
         const collectibles = this.city.getCollectibles();

@@ -3,6 +3,7 @@ import * as CANNON from 'cannon-es';
 import { Input } from './Input';
 import { GamepadInput } from './Gamepad';
 import { Sound } from './Sound';
+import { VehicleDamage } from './VehicleDamage';
 
 export class Vehicle {
     private scene: THREE.Scene;
@@ -33,6 +34,7 @@ export class Vehicle {
     private currentSteeringValue = 0;
     private speedBoostTimer = 0;
     private speedBoostMultiplier = 1;
+    private damageSystem: VehicleDamage;
 
     constructor(
         scene: THREE.Scene,
@@ -87,6 +89,9 @@ export class Vehicle {
         });
 
         this.vehicle.addToWorld(world);
+
+        // Initialize damage system
+        this.damageSystem = new VehicleDamage(this.chassisMesh, this.chassisBody);
     }
 
     private buildCarModel(): THREE.Group {
@@ -350,5 +355,21 @@ export class Vehicle {
 
     public boostSpeed() {
         this.speedBoostTimer = 5.0; // 5 second boost
+    }
+
+    public applyDamage(damage: number, impactPoint?: THREE.Vector3, impactForce?: number): boolean {
+        return this.damageSystem.applyDamage(damage, impactPoint, impactForce);
+    }
+
+    public getDamageSystem(): VehicleDamage {
+        return this.damageSystem;
+    }
+
+    public getDamageLevel(): string {
+        return this.damageSystem.getDamageLevel();
+    }
+
+    public getHealthPercent(): number {
+        return this.damageSystem.getHealthPercent();
     }
 }
