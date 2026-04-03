@@ -569,6 +569,91 @@ canvas {
     font-size: 12px;
 }
 
+/* Install Button */
+.install-button {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10003;
+  pointer-events: auto;
+}
+
+.install-btn {
+  background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+  border: 2px solid #ffffff;
+  border-radius: 12px;
+  padding: 12px 20px;
+  color: #000000;
+  font-weight: bold;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.4);
+  animation: installPulse 2s ease-in-out infinite;
+}
+
+.install-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 30px rgba(0, 255, 0, 0.6);
+  background: linear-gradient(135deg, #00ff00 0%, #00dd00 100%);
+}
+
+.install-icon {
+  font-size: 18px;
+}
+
+.install-text {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+@keyframes installPulse {
+  0%, 100% { 
+    transform: scale(1); 
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.4);
+  }
+  50% { 
+    transform: scale(1.05); 
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.6);
+  }
+}
+
+/* PWA Install Notice */
+.pwa-notice {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 255, 0, 0.1);
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  border-radius: 8px;
+  padding: 10px 20px;
+  color: #00ff00;
+  font-size: 12px;
+  text-align: center;
+  z-index: 10002;
+  pointer-events: none;
+  animation: noticeSlide 3s ease-in-out;
+}
+
+@keyframes noticeSlide {
+  0% { 
+    opacity: 0; 
+    transform: translateX(-50%) translateY(20px); 
+  }
+  20%, 80% { 
+    opacity: 1; 
+    transform: translateX(-50%) translateY(0); 
+  }
+  100% { 
+    opacity: 0; 
+    transform: translateX(-50%) translateY(-20px); 
+  }
+}
+
 /* Enhanced Game UI */
 .game-ui {
     position: absolute;

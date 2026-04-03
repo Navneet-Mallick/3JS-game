@@ -4,7 +4,95 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Neo-Noir City</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="Neo-Noir City - A GTA-style open-world game with professional features" />
+    <meta name="theme-color" content="#00ff00" />
+    <meta name="background-color" content="#0a0a0a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Neo-Noir City" />
+    <meta name="application-name" content="Neo-Noir City" />
+    <meta name="msapplication-TileColor" content="#00ff00" />
+    <meta name="msapplication-config" content="/browserconfig.xml" />
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="Neo-Noir City - GTA-style Open World Game" />
+    <meta property="og:description" content="Experience a professional GTA-style open-world game with complete features" />
+    <meta property="og:image" content="/screenshot-1.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="/" />
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Neo-Noir City - GTA-style Game" />
+    <meta name="twitter:description" content="Professional open-world game with complete GTA features" />
+    <meta name="twitter:image" content="/screenshot-1.png" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icon-192.png" />
+    
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log(' Neo-Noir City SW registered:', registration);
+            })
+            .catch((error) => {
+              console.log(' Neo-Noir City SW registration failed:', error);
+            });
+        });
+      }
+    </script>
+    
+    <!-- Install Prompt Handler -->
+    <script>
+      let deferredPrompt;
+      
+      window.addEventListener('beforeinstallprompt', (e) => {
+        console.log(' Install prompt available');
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        // Show install button
+        const installBtn = document.getElementById('install-btn');
+        if (installBtn) {
+          installBtn.style.display = 'block';
+          installBtn.addEventListener('click', () => {
+            if (deferredPrompt) {
+              deferredPrompt.prompt();
+              deferredPrompt.userChoice.then((choiceResult) => {
+                if (choiceResult.outcome === 'accepted') {
+                  console.log(' Neo-Noir City installed!');
+                } else {
+                  console.log(' Installation declined');
+                }
+                deferredPrompt = null;
+                installBtn.style.display = 'none';
+              });
+            }
+          });
+        }
+      });
+      
+      // Hide install button after installation
+      window.addEventListener('appinstalled', () => {
+        console.log(' Neo-Noir City successfully installed!');
+        const installBtn = document.getElementById('install-btn');
+        if (installBtn) {
+          installBtn.style.display = 'none';
+        }
+      });
+    </script>
+    
+    <title>Neo-Noir City - GTA-style Open World Game</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&display=swap" rel="stylesheet">
@@ -32,7 +120,15 @@
         <p>Click to resume</p>
       </div>
 
-      <!-- Game UI Overlay -->
+      <!-- Install Button -->
+        <div class="install-button" id="install-btn" style="display: none;">
+          <button class="install-btn">
+            <span class="install-icon">📱</span>
+            <span class="install-text">Install Game</span>
+          </button>
+        </div>
+
+        <!-- Game UI Overlay -->
       <div class="game-ui">
         <div class="crosshair"></div>
 
