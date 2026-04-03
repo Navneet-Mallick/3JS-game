@@ -137,6 +137,47 @@ export class Sound {
         src.start();
     }
 
+    public playPickup() {
+        if (!this.ctx || !this.masterGain) return;
+        const g = this.ctx.createGain();
+        g.gain.value = 0.3;
+        g.connect(this.masterGain);
+        
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1600, this.ctx.currentTime + 0.1);
+        osc.connect(g);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.1);
+    }
+
+    public playExplosion() {
+        if (!this.ctx || !this.masterGain) return;
+        const g = this.ctx.createGain();
+        g.gain.value = 0.4;
+        g.connect(this.masterGain);
+        
+        // White noise for explosion
+        const bufferSize = this.ctx.sampleRate * 0.3;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        
+        const src = this.ctx.createBufferSource();
+        src.buffer = buffer;
+        const f = this.ctx.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = 200;
+        src.connect(f);
+        f.connect(g);
+        g.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+        src.start();
+    }
+
     public resume() {
         this.ctx?.resume();
     }

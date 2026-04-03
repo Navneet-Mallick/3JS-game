@@ -1,4 +1,5 @@
 import * as CANNON from 'cannon-es';
+import * as THREE from 'three';
 import { GameScene } from './Scene';
 import { Physics } from './Physics';
 import { Player } from './Player';
@@ -18,6 +19,7 @@ export class Core {
     private physics: Physics;
     private player: Player;
     private vehicle: Vehicle;
+    private city: City;
     private traffic: TrafficCar[] = [];
     private minimap: Minimap;
     private sound: Sound;
@@ -45,7 +47,7 @@ export class Core {
             this.scene   = new GameScene();
             this.physics = new Physics();
 
-            new City(this.scene.getScene(), this.physics.getWorld());
+            this.city = new City(this.scene.getScene(), this.physics.getWorld());
 
             this.player  = new Player(this.scene.getScene(), this.physics.getWorld(), this.scene.getCamera());
             this.vehicle = new Vehicle(
@@ -166,6 +168,60 @@ export class Core {
         }
     }
 
+    private handleInteractions() {
+        const playerPos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
+        
+        // Handle collectibles
+        const collectibles = this.city.getCollectibles();
+        collectibles.forEach((collectible, index) => {
+            if (collectible.userData.collected) return;
+            
+            const distance = playerPos.distanceTo(collectible.position);
+            if (distance < 3) {
+                collectible.userData.collected = true;
+                collectible.visible = false;
+                this.score.add(100, 'COLLECTIBLE');
+                this.sound.playPickup();
+            }
+            
+            // Animate collectibles
+            if (!collectible.userData.collected) {
+                collectible.rotation.y += collectible.userData.rotationSpeed;
+                collectible.position.y = 1 + Math.sin(Date.now() * 0.002 + index) * 0.2;
+            }
+        });
+        
+        // Handle destructibles
+        const destructibles = this.city.getDestructibles();
+        destructibles.forEach((destructible) => {
+            const distance = playerPos.distanceTo(destructible.mesh.position);
+            const velocity = this.playerInVehicle ? 
+                this.vehicle.getSpeedKmh() : 
+                Math.sqrt(this.player.body.velocity.x ** 2 + this.player.body.velocity.z ** 2) * 10;
+            
+            if (distance < 4 && velocity > 20) {
+                destructible.health -= velocity * 0.5;
+                
+                if (destructible.health <= 0) {
+                    // Destroy the destructible
+                    destructible.mesh.visible = false;
+                    this.physics.getWorld().removeBody(destructible.body);
+                    this.score.add(50, 'DESTRUCTION');
+                    this.sound.playExplosion();
+                } else {
+                    // Damage effect
+                    const material = Array.isArray(destructible.mesh.material) 
+                        ? destructible.mesh.material[0] as THREE.MeshStandardMaterial
+                        : destructible.mesh.material as THREE.MeshStandardMaterial;
+                    material.color.setHex(0xff8888);
+                    setTimeout(() => {
+                        material.color.setHex(0xff4444);
+                    }, 100);
+                }
+            }
+        });
+    }
+
     private animate(time: number) {
         requestAnimationFrame((t) => this.animate(t));
 
@@ -181,6 +237,9 @@ export class Core {
         this.player.update(dt);
         this.vehicle.update(dt);
         this.traffic.forEach(t => t.update(dt));
+        
+        // Handle interactions
+        this.handleInteractions();
 
         // Score — drift + air time
         if (this.playerInVehicle) {

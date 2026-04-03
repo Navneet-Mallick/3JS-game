@@ -9,8 +9,8 @@ export class GameScene {
 
     constructor() {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x05050f);
-        this.scene.fog = new THREE.FogExp2(0x05050f, 0.004);
+        this.scene.background = new THREE.Color(0x87CEEB);
+        this.scene.fog = new THREE.FogExp2(0x87CEEB, 0.002);
 
         this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 800);
         this.camera.position.set(0, 8, 12);
@@ -32,23 +32,23 @@ export class GameScene {
         canvas.style.zIndex = '0';
         document.body.appendChild(canvas);
 
-        // Ambient — dark night
-        const ambient = new THREE.AmbientLight(0x111133, 2.5);
+        // Ambient — bright daylight
+        const ambient = new THREE.AmbientLight(0xffffff, 0.8);
         this.scene.add(ambient);
 
-        // Moon-like directional
-        const moon = new THREE.DirectionalLight(0x8899ff, 2.0);
-        moon.position.set(-50, 120, -80);
-        moon.castShadow = true;
-        moon.shadow.mapSize.set(2048, 2048);
-        moon.shadow.camera.near = 1;
-        moon.shadow.camera.far = 400;
-        moon.shadow.camera.left = -150;
-        moon.shadow.camera.right = 150;
-        moon.shadow.camera.top = 150;
-        moon.shadow.camera.bottom = -150;
-        moon.shadow.bias = -0.001;
-        this.scene.add(moon);
+        // Sun-like directional
+        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+        sun.position.set(50, 100, 50);
+        sun.castShadow = true;
+        sun.shadow.mapSize.set(2048, 2048);
+        sun.shadow.camera.near = 1;
+        sun.shadow.camera.far = 400;
+        sun.shadow.camera.left = -150;
+        sun.shadow.camera.right = 150;
+        sun.shadow.camera.top = 150;
+        sun.shadow.camera.bottom = -150;
+        sun.shadow.bias = -0.001;
+        this.scene.add(sun);
 
         // Post-processing
         this.composer = new EffectComposer(this.renderer);

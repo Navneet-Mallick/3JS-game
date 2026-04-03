@@ -16,12 +16,20 @@ function mulberry32(seed: number) {
 }
 
 export class City {
+    private collectibles: THREE.Mesh[] = [];
+    private destructibles: { mesh: THREE.Mesh; body: CANNON.Body; health: number }[] = [];
+
     constructor(scene: THREE.Scene, world: CANNON.World) {
         this.buildGround(scene, world);
         this.buildRoads(scene);
         this.buildBlocks(scene, world);
         this.buildStreetLights(scene);
+        this.buildCollectibles(scene, world);
+        this.buildDestructibles(scene, world);
     }
+
+    public getCollectibles() { return this.collectibles; }
+    public getDestructibles() { return this.destructibles; }
 
     private buildGround(scene: THREE.Scene, world: CANNON.World) {
         const mesh = new THREE.Mesh(
@@ -147,5 +155,78 @@ export class City {
                 scene.add(light);
             }
         }
+    }
+
+    private buildCollectibles(scene: THREE.Scene, world: CANNON.World) {
+        const collectiblePositions: [number, number, number][] = [
+            [15, 1, 15], [-15, 1, 15], [15, 1, -15], [-15, 1, -15],
+            [40, 1, 0], [-40, 1, 0], [0, 1, 40], [0, 1, -40],
+            [30, 1, 30], [-30, 1, 30], [30, 1, -30], [-30, 1, -30]
+        ];
+
+        collectiblePositions.forEach(([x, y, z], index) => {
+            const geometry = new THREE.OctahedronGeometry(0.8, 0);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x00ff88,
+                emissive: 0x00ff88,
+                emissiveIntensity: 0.5,
+                metalness: 0.8,
+                roughness: 0.2
+            });
+            const collectible = new THREE.Mesh(geometry, material);
+            collectible.position.set(x, y, z);
+            collectible.castShadow = true;
+            collectible.userData = { type: 'collectible', id: index, collected: false };
+            
+            // Add rotation animation
+            collectible.userData.rotationSpeed = Math.random() * 0.02 + 0.01;
+            
+            scene.add(collectible);
+            this.collectibles.push(collectible);
+
+            // Add physics body for collision detection
+            const body = new CANNON.Body({
+                mass: 0,
+                shape: new CANNON.Sphere(0.8),
+                position: new CANNON.Vec3(x, y, z)
+            });
+            body.collisionFilterGroup = 2; // Collectible group
+            body.collisionFilterMask = 1; // Collide with player/vehicle
+            world.addBody(body);
+        });
+    }
+
+    private buildDestructibles(scene: THREE.Scene, world: CANNON.World) {
+        const destructiblePositions: [number, number, number][] = [
+            [25, 1, 10], [-25, 1, 10], [25, 1, -10], [-25, 1, -10],
+            [10, 1, 25], [10, 1, -25], [-10, 1, 25], [-10, 1, -25]
+        ];
+
+        destructiblePositions.forEach(([x, y, z], index) => {
+            const geometry = new THREE.BoxGeometry(2, 2, 2);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0xff4444,
+                roughness: 0.7,
+                metalness: 0.3
+            });
+            const destructible = new THREE.Mesh(geometry, material);
+            destructible.position.set(x, y, z);
+            destructible.castShadow = true;
+            destructible.receiveShadow = true;
+            destructible.userData = { type: 'destructible', id: index, health: 100 };
+            
+            scene.add(destructible);
+
+            const body = new CANNON.Body({
+                mass: 50,
+                shape: new CANNON.Box(new CANNON.Vec3(1, 1, 1)),
+                position: new CANNON.Vec3(x, y, z)
+            });
+            body.collisionFilterGroup = 4; // Destructible group
+            body.collisionFilterMask = 1; // Collide with player/vehicle
+            world.addBody(body);
+
+            this.destructibles.push({ mesh: destructible, body, health: 100 });
+        });
     }
 }

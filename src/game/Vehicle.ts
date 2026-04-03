@@ -30,6 +30,7 @@ export class Vehicle {
     private readonly MAX_GEAR = 6;
 
     private sound: Sound;
+    private currentSteeringValue = 0;
 
     constructor(
         scene: THREE.Scene,
@@ -207,10 +208,11 @@ export class Vehicle {
 
         // Torque curve — peaks at mid-gear, falls off at top
         const gearRatio = this.GEAR_RATIOS[this.gear] ?? 1;
-        const ENGINE_BASE = 4200;
+        const ENGINE_BASE = 4800;
         const ENGINE_FORCE = ENGINE_BASE * gearRatio;
-        const BRAKE_FORCE  = 160;
-        const MAX_STEER = Math.max(0.12, 0.44 - spd * 0.0025);
+        const BRAKE_FORCE  = 200;
+        const MAX_STEER = Math.max(0.15, 0.48 - spd * 0.003);
+        const STEER_SPEED = 4.0;
 
         let force = 0, steer = 0, brake = 0;
         let handbrake = false, throttle = false;
@@ -245,16 +247,27 @@ export class Vehicle {
         const fwdSpd = vel.dot(carFwd);
         this.lateralSpeed = vel.clone().sub(carFwd.clone().multiplyScalar(fwdSpd)).length();
 
+        // Smooth steering interpolation
+        const targetSteer = steer;
+        this.currentSteeringValue += (targetSteer - this.currentSteeringValue) * Math.min(1.0, STEER_SPEED * dt);
+        
         this.vehicle.applyEngineForce(force, 2);
         this.vehicle.applyEngineForce(force, 3);
-        this.vehicle.setSteeringValue(steer, 0);
-        this.vehicle.setSteeringValue(steer, 1);
+        this.vehicle.setSteeringValue(this.currentSteeringValue, 0);
+        this.vehicle.setSteeringValue(this.currentSteeringValue, 1);
 
         if (handbrake) {
+            // Enhanced handbrake for drifting
             this.vehicle.setBrake(0, 0); this.vehicle.setBrake(0, 1);
-            this.vehicle.setBrake(BRAKE_FORCE * 4, 2); this.vehicle.setBrake(BRAKE_FORCE * 4, 3);
+            this.vehicle.setBrake(BRAKE_FORCE * 6, 2); this.vehicle.setBrake(BRAKE_FORCE * 6, 3);
+            // Reduce rear friction for drifting
+            this.vehicle.wheelInfos[2].frictionSlip = 3.0;
+            this.vehicle.wheelInfos[3].frictionSlip = 3.0;
         } else {
             for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i);
+            // Restore normal friction
+            this.vehicle.wheelInfos[2].frictionSlip = 10.5;
+            this.vehicle.wheelInfos[3].frictionSlip = 10.5;
         }
 
         this.chassisMesh.position.copy(this.chassisBody.position as unknown as THREE.Vector3);
