@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neo-Noir City</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="app">
+      <!-- Loading Screen -->
+      <div id="loading-screen">
+        <h1 class="loader-text">Neo-Noir City</h1>
+        <div class="loader-bar-bg">
+          <div class="loader-bar" id="loader-bar"></div>
+        </div>
+      </div>
+
+      <!-- Pointer Lock Prompt (hidden until loading done) -->
+      <div id="lock-prompt" style="display:none">
+        <h2>Click to Play</h2>
+        <p>Mouse to look &nbsp;·&nbsp; WASD to move &nbsp;·&nbsp; F to enter car</p>
+      </div>
+
+      <!-- Pause Screen (shown when Escape pressed mid-game) -->
+      <div id="pause-screen">
+        <h2>Paused</h2>
+        <p>Click to resume</p>
+      </div>
+
+      <!-- Game UI Overlay -->
+      <div class="game-ui">
+        <div class="crosshair"></div>
+
+        <div class="hud-top">
+          <div class="hud-badge" id="mode-badge">On Foot</div>
+        </div>
+
+        <div class="vehicle-indicator" id="vehicle-indicator">In Vehicle</div>
+
+        <!-- Speedometer (visible while driving) -->
+        <div class="speedometer" id="speedometer">
+          <span id="speed-value">0</span>
+          <span class="speed-unit">km/h</span>
+        </div>
+
+        <div class="minimap-container">
+          <canvas id="minimap-canvas"></canvas>
+        </div>
+
+        <div class="instructions">
+          <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move / Drive</p>
+          <p><kbd>Space</kbd> Jump / Handbrake</p>
+          <p><kbd>Shift</kbd> Sprint</p>
+          <p><kbd>F</kbd> Enter / Exit Car</p>
+          <p><kbd>V</kbd> Camera View</p>
+        </div>
+
+        <!-- Near-vehicle prompt -->
+        <div id="enter-prompt" style="display:none">
+          <span>Press <kbd>F</kbd> to enter vehicle</span>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
