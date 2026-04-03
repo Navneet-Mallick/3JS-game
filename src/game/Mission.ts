@@ -24,7 +24,6 @@ export class MissionSystem {
     private missionIndex = 0;
     private timer = 0;
     private active = false;
-    private completed = false;
 
     // Marker mesh
     public markerMesh: THREE.Mesh | null = null;
@@ -55,7 +54,6 @@ export class MissionSystem {
         this.current = MISSIONS[idx];
         this.timer = this.current.duration ?? 0;
         this.active = true;
-        this.completed = false;
 
         this.removeMarker();
         if (this.current.target) this.spawnMarker(this.current.target);
@@ -112,7 +110,6 @@ export class MissionSystem {
         if (!this.current) return 0;
         const reward = this.current.reward;
         this.active = false;
-        this.completed = true;
         this.removeMarker();
 
         const flash = document.getElementById('mission-flash');
