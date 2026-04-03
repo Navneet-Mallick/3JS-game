@@ -18,7 +18,7 @@ body {
 }
 
 /* Canvas sits at the very back, fills the whole viewport */
-#app canvas {
+body > canvas {
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
@@ -93,6 +93,7 @@ body {
   width: 180px !important;
   height: 180px !important;
   border-radius: 50%;
+  position: static !important;
 }
 
 /* ── HUD ── */
@@ -172,6 +173,7 @@ kbd {
   justify-content: center;
   z-index: 50;
   transition: opacity 0.3s;
+  cursor: pointer;
 }
 
 #lock-prompt h2 {

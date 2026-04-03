@@ -27,12 +27,17 @@ export class Input {
         });
 
         const appCanvas = document.querySelector('canvas') || document.body;
-        
-        appCanvas.addEventListener('click', () => {
+
+        const requestLock = () => {
             if (!this.isPointerLocked) {
                 appCanvas.requestPointerLock();
             }
-        });
+        };
+
+        appCanvas.addEventListener('click', requestLock);
+
+        const lockPrompt = document.getElementById('lock-prompt');
+        if (lockPrompt) lockPrompt.addEventListener('click', requestLock);
 
         document.addEventListener('pointerlockchange', () => {
             this.isPointerLocked = !!document.pointerLockElement;
