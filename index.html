@@ -43,12 +43,27 @@
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
             .then((registration) => {
-              console.log(' Neo-Noir City SW registered:', registration);
+              console.log('🎮 Neo-Noir City SW registered:', registration.scope);
+              
+              // Check for service worker updates
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      console.log('🔄 New service worker available - refresh to update');
+                    }
+                  });
+                }
+              });
             })
             .catch((error) => {
-              console.log(' Neo-Noir City SW registration failed:', error);
+              console.log('🎮 Neo-Noir City SW registration failed:', error);
+              // Don't show error to user, just log it
             });
         });
+      } else {
+        console.log('🎮 Service Worker not supported in this browser');
       }
     </script>
     

@@ -8,7 +8,6 @@ const STATIC_FILES = [
   '/',
   '/index.html',
   '/style.css',
-  '/src/main.ts',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
@@ -24,6 +23,11 @@ self.addEventListener('install', (event) => {
       .then((cache) => {
         console.log('📦 Caching static files...');
         return cache.addAll(STATIC_FILES);
+      })
+      .catch((error) => {
+        console.log('❌ Cache installation failed:', error);
+        // Don't fail the installation if caching fails
+        return Promise.resolve();
       })
       .then(() => {
         console.log('✅ Installation complete!');
@@ -51,6 +55,10 @@ self.addEventListener('activate', (event) => {
       .then(() => {
         console.log('✅ Activation complete!');
         return self.clients.claim();
+      })
+      .catch((error) => {
+        console.log('❌ Activation failed:', error);
+        return Promise.resolve();
       })
   );
 });
@@ -87,13 +95,24 @@ self.addEventListener('fetch', (event) => {
             return networkResponse;
           })
           .catch(() => {
-            // Offline fallback
+            // Offline fallback - try to serve from any cache
             console.log('📵 Offline - serving from cache');
+            return caches.match('/');
+          })
+          .catch(() => {
+            // Final fallback
             return new Response('Neo-Noir City is offline. Please check your connection.', {
               status: 503,
               statusText: 'Service Unavailable'
             });
           });
+      })
+      .catch((error) => {
+        console.log('❌ Fetch error:', error);
+        return new Response('Neo-Noir City - Error loading resource', {
+          status: 500,
+          statusText: 'Internal Server Error'
+        });
       })
   );
 });
@@ -103,7 +122,7 @@ self.addEventListener('sync', (event) => {
   if (event.tag === 'save-game') {
     event.waitUntil(
       // Sync save games to server/storage
-      console.log('💾 Syncing save games...');
+      console.log('💾 Syncing save games...')
     );
   }
 });
@@ -142,4 +161,13 @@ self.addEventListener('periodicsync', (event) => {
       console.log('🔄 Checking for game updates...')
     );
   }
+});
+
+// Error handling
+self.addEventListener('error', (event) => {
+  console.log('❌ Service Worker Error:', event.error);
+});
+
+self.addEventListener('unhandledrejection', (event) => {
+  console.log('❌ Unhandled Promise Rejection:', event.reason);
 });
