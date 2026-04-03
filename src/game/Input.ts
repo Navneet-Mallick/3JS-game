@@ -2,42 +2,32 @@ export class Input {
     private static keys: Record<string, boolean> = {};
     private static keyPresses: Record<string, boolean> = {};
 
-    public static mouseX: number = 0;
-    public static mouseY: number = 0;
-    public static movementX: number = 0;
-    public static movementY: number = 0;
-    public static isPointerLocked: boolean = false;
+    public static movementX = 0;
+    public static movementY = 0;
+    public static isPointerLocked = false;
 
     public static init() {
         window.addEventListener('keydown', (e) => {
-            // Prevent browser from scrolling on space/arrow keys
             if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(e.key.toLowerCase())) {
                 e.preventDefault();
             }
             const key = e.key.toLowerCase();
-            if (!this.keys[key]) {
-                this.keyPresses[key] = true;
-            }
+            if (!this.keys[key]) this.keyPresses[key] = true;
             this.keys[key] = true;
         });
 
         window.addEventListener('keyup', (e) => {
-            const key = e.key.toLowerCase();
-            this.keys[key] = false;
+            this.keys[e.key.toLowerCase()] = false;
         });
 
-        const appCanvas = document.querySelector('canvas') || document.body;
-
-        const requestLock = () => {
-            if (!this.isPointerLocked) {
-                appCanvas.requestPointerLock();
-            }
-        };
-
-        appCanvas.addEventListener('click', requestLock);
-
-        const lockPrompt = document.getElementById('lock-prompt');
-        if (lockPrompt) lockPrompt.addEventListener('click', requestLock);
+        // Use document.body as click target — always exists
+        // Pointer lock will be requested on the canvas once it exists
+        document.addEventListener('click', () => {
+            if (this.isPointerLocked) return;
+            const canvas = document.querySelector('canvas');
+            const target = canvas ?? document.body;
+            target.requestPointerLock();
+        });
 
         document.addEventListener('pointerlockchange', () => {
             this.isPointerLocked = !!document.pointerLockElement;
@@ -51,17 +41,12 @@ export class Input {
         });
     }
 
-    public static isKeyDown(key: string): boolean {
-        return !!this.keys[key.toLowerCase()];
-    }
-
-    public static isKeyPressed(key: string): boolean {
-        return !!this.keyPresses[key.toLowerCase()];
-    }
+    public static isKeyDown(key: string)    { return !!this.keys[key.toLowerCase()]; }
+    public static isKeyPressed(key: string) { return !!this.keyPresses[key.toLowerCase()]; }
 
     public static clearPerFrameData() {
         this.keyPresses = {};
-        this.movementX = 0;
-        this.movementY = 0;
+        this.movementX  = 0;
+        this.movementY  = 0;
     }
 }
