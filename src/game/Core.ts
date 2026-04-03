@@ -55,6 +55,7 @@ export class Core {
     private speedoEl    = document.getElementById('speedo-value');
     private ammoEl      = document.getElementById('ammo-display');
     private moneyEl     = document.getElementById('money-display');
+    private radioEl     = document.getElementById('radio-station');
     private lockPrompt  = document.getElementById('pointer-lock-prompt');
     private pauseScreen = document.getElementById('pause-screen');
     private enterPrompt = document.getElementById('enter-prompt');
@@ -278,6 +279,40 @@ export class Core {
             this.saveSystem.quickLoad();
             console.log('Quick loaded!');
         }
+        
+        // Radio controls (use different keys to avoid conflicts)
+        // Radio station next (Page Up)
+        if (Input.isKeyPressed('PageUp')) {
+            this.sound.nextRadioStation();
+            const station = this.sound.getCurrentStation();
+            console.log(`🎵 Radio: ${station.name}`);
+        }
+        
+        // Radio station previous (Page Down)
+        if (Input.isKeyPressed('PageDown')) {
+            this.sound.previousRadioStation();
+            const station = this.sound.getCurrentStation();
+            console.log(`🎵 Radio: ${station.name}`);
+        }
+        
+        // Radio toggle (Home)
+        if (Input.isKeyPressed('Home')) {
+            this.sound.toggleRadio();
+        }
+        
+        // Radio volume up (End + Shift)
+        if (Input.isKeyPressed('End') && Input.isKeyDown('Shift')) {
+            const currentVolume = this.sound.getRadioVolume();
+            this.sound.setRadioVolume(Math.min(1, currentVolume + 0.1));
+            console.log(`🔊 Radio Volume: ${Math.round(this.sound.getRadioVolume() * 100)}%`);
+        }
+        
+        // Radio volume down (End + Ctrl)
+        if (Input.isKeyPressed('End') && Input.isKeyDown('Control')) {
+            const currentVolume = this.sound.getRadioVolume();
+            this.sound.setRadioVolume(Math.max(0, currentVolume - 0.1));
+            console.log(`🔊 Radio Volume: ${Math.round(this.sound.getRadioVolume() * 100)}%`);
+        }
     }
 
     private handleEnterExit() {
@@ -495,6 +530,13 @@ export class Core {
                     console.log('🏆 ACHIEVEMENT: $50,000 - Crime Lord!');
                 }
             }
+        }
+
+        // Update radio display
+        if (this.radioEl) {
+            const station = this.sound.getCurrentStation();
+            this.radioEl.textContent = station.name;
+            this.radioEl.style.color = this.sound.getRadioVolume() > 0 ? '#ff00ff' : '#666666';
         }
 
         // Mission update

@@ -11,6 +11,13 @@ export class Sound {
     private masterGain: GainNode | null = null;
     private footstepTimer = 0;
     private muted = false;
+    
+    // Radio/BGM System
+    private bgmGain: GainNode | null = null;
+    private currentStation: number = 0;
+    private bgmOscillators: OscillatorNode[] = [];
+    private isRadioOn = false;
+    private radioVolume = 0.3;
 
     public init() {
         // AudioContext will be created on first user interaction
@@ -59,6 +66,327 @@ export class Sound {
         src.connect(filter);
         filter.connect(this.ambientGain);
         src.start();
+        
+        // Initialize BGM system
+        this.initBGMSystem();
+    }
+
+    private initBGMSystem() {
+        if (!this.ctx || !this.masterGain) return;
+        
+        this.bgmGain = this.ctx.createGain();
+        this.bgmGain.gain.value = 0;
+        this.bgmGain.connect(this.masterGain);
+        
+        // Start with ambient background music
+        this.startBGM();
+    }
+
+    // Radio Stations - 3 Actual Songs
+    private readonly radioStations = [
+        {
+            name: "Neo-Noir FM",
+            type: "synthwave",
+            description: "Midnight City - Synthwave Anthem",
+            tempo: 120,
+            key: "C minor",
+            melody: [
+                { note: 261.63, duration: 0.5 }, // C4
+                { note: 311.13, duration: 0.5 }, // Eb4
+                { note: 369.99, duration: 1.0 }, // F4
+                { note: 311.13, duration: 0.5 }, // Eb4
+                { note: 261.63, duration: 0.5 }, // C4
+                { note: 349.23, duration: 1.0 }, // F4
+                { note: 311.13, duration: 0.5 }, // Eb4
+                { note: 261.63, duration: 1.5 }  // C4
+            ],
+            bass: [
+                { note: 130.81, duration: 1.0 }, // C3
+                { note: 130.81, duration: 1.0 }, // C3
+                { note: 155.56, duration: 1.0 }, // Eb3
+                { note: 130.81, duration: 1.0 }  // C3
+            ],
+            waveform: "sawtooth" as OscillatorType
+        },
+        {
+            name: "City Beats 98.5",
+            type: "electronic",
+            description: "Urban Dreams - Electronic Journey",
+            tempo: 128,
+            key: "G minor",
+            melody: [
+                { note: 392.00, duration: 0.25 }, // G4
+                { note: 466.16, duration: 0.25 }, // Bb4
+                { note: 523.25, duration: 0.5 },  // C5
+                { note: 466.16, duration: 0.25 }, // Bb4
+                { note: 392.00, duration: 0.5 },  // G4
+                { note: 349.23, duration: 0.5 },  // F4
+                { note: 392.00, duration: 1.0 }   // G4
+            ],
+            bass: [
+                { note: 196.00, duration: 0.5 }, // G3
+                { note: 233.08, duration: 0.5 }, // Bb3
+                { note: 196.00, duration: 0.5 }, // G3
+                { note: 174.61, duration: 0.5 }  // F3
+            ],
+            waveform: "square" as OscillatorType
+        },
+        {
+            name: "Rock Radio 101",
+            type: "rock",
+            description: "Highway Thunder - Rock Anthem",
+            tempo: 140,
+            key: "E minor",
+            melody: [
+                { note: 329.63, duration: 0.33 }, // E4
+                { note: 329.63, duration: 0.33 }, // E4
+                { note: 392.00, duration: 0.33 }, // G4
+                { note: 329.63, duration: 0.33 }, // E4
+                { note: 392.00, duration: 0.33 }, // G4
+                { note: 440.00, duration: 0.33 }, // A4
+                { note: 392.00, duration: 0.33 }, // G4
+                { note: 329.63, duration: 0.66 }  // E4
+            ],
+            bass: [
+                { note: 164.81, duration: 0.5 }, // E3
+                { note: 164.81, duration: 0.5 }, // E3
+                { note: 196.00, duration: 0.5 }, // G3
+                { note: 164.81, duration: 0.5 }  // E3
+            ],
+            waveform: "sawtooth" as OscillatorType
+        }
+    ];
+
+    public startBGM() {
+        if (!this.ctx || !this.bgmGain) return;
+        
+        this.stopBGM(); // Clear any existing BGM
+        
+        const station = this.radioStations[this.currentStation];
+        this.isRadioOn = true;
+        
+        // Start continuous music loop
+        this.startSongLoop(station);
+        
+        // Fade in
+        this.bgmGain.gain.setTargetAtTime(this.radioVolume, this.ctx.currentTime, 1.0);
+        
+        console.log(`🎵 Now playing: ${station.name} - ${station.description}`);
+    }
+
+    private startSongLoop(station: any) {
+        if (!this.ctx || !this.bgmGain) return;
+        
+        const songDuration = 4; // 4 seconds per loop
+        const loopInterval = setInterval(() => {
+            if (!this.isRadioOn) {
+                clearInterval(loopInterval);
+                return;
+            }
+            
+            // Create a new iteration of the song
+            this.createDrums(station.tempo);
+            this.createBassLine(station.bass, station.tempo, station.waveform);
+            this.createMelody(station.melody, station.tempo, station.waveform);
+        }, songDuration * 1000);
+        
+        // Store interval ID for cleanup
+        (this as any).songLoopInterval = loopInterval;
+    }
+
+    private createDrums(tempo: number) {
+        if (!this.ctx || !this.bgmGain) return;
+        
+        const beatDuration = 60 / tempo;
+        
+        // Kick drum
+        const kickOsc = this.ctx.createOscillator();
+        const kickGain = this.ctx.createGain();
+        const kickFilter = this.ctx.createBiquadFilter();
+        
+        kickOsc.type = 'sine';
+        kickOsc.frequency.setValueAtTime(60, this.ctx.currentTime);
+        kickFilter.type = 'lowpass';
+        kickFilter.frequency.value = 100;
+        
+        kickGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        kickGain.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 0.01);
+        kickGain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+        
+        kickOsc.connect(kickFilter);
+        kickFilter.connect(kickGain);
+        kickGain.connect(this.bgmGain);
+        
+        // Schedule kick drum pattern
+        for (let i = 0; i < 4; i++) {
+            kickOsc.start(this.ctx.currentTime + i * beatDuration);
+            kickOsc.stop(this.ctx.currentTime + i * beatDuration + 0.1);
+        }
+        
+        this.bgmOscillators.push(kickOsc);
+        
+        // Hi-hat
+        const hihatOsc = this.ctx.createOscillator();
+        const hihatGain = this.ctx.createGain();
+        const hihatFilter = this.ctx.createBiquadFilter();
+        
+        hihatOsc.type = 'square';
+        hihatOsc.frequency.setValueAtTime(8000, this.ctx.currentTime);
+        hihatFilter.type = 'highpass';
+        hihatFilter.frequency.value = 5000;
+        
+        hihatGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        
+        hihatOsc.connect(hihatFilter);
+        hihatFilter.connect(hihatGain);
+        hihatGain.connect(this.bgmGain);
+        
+        // Schedule hi-hat pattern
+        for (let i = 0; i < 8; i++) {
+            const time = this.ctx.currentTime + i * beatDuration * 0.5;
+            hihatGain.gain.linearRampToValueAtTime(0.1, time);
+            hihatGain.gain.linearRampToValueAtTime(0, time + 0.05);
+        }
+        
+        hihatOsc.start();
+        hihatOsc.stop(this.ctx.currentTime + beatDuration * 4);
+        
+        this.bgmOscillators.push(hihatOsc);
+    }
+
+    private createBassLine(bassNotes: { note: number; duration: number }[], tempo: number, waveform: OscillatorType) {
+        if (!this.ctx || !this.bgmGain) return;
+        
+        const beatDuration = 60 / tempo;
+        let currentTime = this.ctx.currentTime;
+        
+        bassNotes.forEach((note, index) => {
+            const bassOsc = this.ctx!.createOscillator();
+            const bassGain = this.ctx!.createGain();
+            const bassFilter = this.ctx!.createBiquadFilter();
+            
+            bassOsc.type = waveform;
+            bassOsc.frequency.setValueAtTime(note.note, currentTime);
+            
+            bassFilter.type = 'lowpass';
+            bassFilter.frequency.value = 500;
+            bassFilter.Q.value = 1;
+            
+            bassGain.gain.setValueAtTime(0, currentTime);
+            bassGain.gain.linearRampToValueAtTime(0.3, currentTime + 0.01);
+            bassGain.gain.linearRampToValueAtTime(0, currentTime + note.duration * 0.8);
+            
+            bassOsc.connect(bassFilter);
+            bassFilter.connect(bassGain);
+            bassGain.connect(this.bgmGain!);
+            
+            bassOsc.start(currentTime);
+            bassOsc.stop(currentTime + note.duration);
+            
+            this.bgmOscillators.push(bassOsc);
+            
+            currentTime += note.duration;
+        });
+    }
+
+    private createMelody(melodyNotes: { note: number; duration: number }[], tempo: number, waveform: OscillatorType) {
+        if (!this.ctx || !this.bgmGain) return;
+        
+        const beatDuration = 60 / tempo;
+        let currentTime = this.ctx.currentTime;
+        
+        melodyNotes.forEach((note, index) => {
+            const melodyOsc = this.ctx!.createOscillator();
+            const melodyGain = this.ctx!.createGain();
+            const melodyFilter = this.ctx!.createBiquadFilter();
+            
+            melodyOsc.type = waveform;
+            melodyOsc.frequency.setValueAtTime(note.note, currentTime);
+            
+            melodyFilter.type = 'lowpass';
+            melodyFilter.frequency.value = 2000;
+            melodyFilter.Q.value = 2;
+            
+            melodyGain.gain.setValueAtTime(0, currentTime);
+            melodyGain.gain.linearRampToValueAtTime(0.2, currentTime + 0.01);
+            melodyGain.gain.linearRampToValueAtTime(0.1, currentTime + note.duration * 0.5);
+            melodyGain.gain.linearRampToValueAtTime(0, currentTime + note.duration * 0.9);
+            
+            melodyOsc.connect(melodyFilter);
+            melodyFilter.connect(melodyGain);
+            melodyGain.connect(this.bgmGain!);
+            
+            melodyOsc.start(currentTime);
+            melodyOsc.stop(currentTime + note.duration);
+            
+            this.bgmOscillators.push(melodyOsc);
+            
+            currentTime += note.duration;
+        });
+    }
+
+    public stopBGM() {
+        if (!this.bgmGain) return;
+        
+        // Clear song loop interval
+        if ((this as any).songLoopInterval) {
+            clearInterval((this as any).songLoopInterval);
+            (this as any).songLoopInterval = null;
+        }
+        
+        // Fade out
+        this.bgmGain.gain.setTargetAtTime(0, this.ctx!.currentTime, 0.5);
+        
+        // Stop all oscillators
+        this.bgmOscillators.forEach(osc => {
+            try {
+                osc.stop();
+            } catch (e) {
+                // Oscillator might already be stopped
+            }
+        });
+        
+        this.bgmOscillators = [];
+        this.isRadioOn = false;
+    }
+
+    public nextRadioStation() {
+        this.currentStation = (this.currentStation + 1) % this.radioStations.length;
+        if (this.isRadioOn) {
+            this.startBGM();
+        }
+    }
+
+    public previousRadioStation() {
+        this.currentStation = (this.currentStation - 1 + this.radioStations.length) % this.radioStations.length;
+        if (this.isRadioOn) {
+            this.startBGM();
+        }
+    }
+
+    public toggleRadio() {
+        if (this.isRadioOn) {
+            this.stopBGM();
+            console.log('🔇 Radio OFF');
+        } else {
+            this.startBGM();
+            console.log('🔊 Radio ON');
+        }
+    }
+
+    public getCurrentStation() {
+        return this.radioStations[this.currentStation];
+    }
+
+    public setRadioVolume(volume: number) {
+        this.radioVolume = Math.max(0, Math.min(1, volume));
+        if (this.bgmGain && this.isRadioOn) {
+            this.bgmGain.gain.setTargetAtTime(this.radioVolume, this.ctx!.currentTime, 0.3);
+        }
+    }
+
+    public getRadioVolume(): number {
+        return this.radioVolume;
     }
 
     public startEngine() {
