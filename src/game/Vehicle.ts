@@ -277,8 +277,10 @@ export class Vehicle {
     public getGear()     { return this.gear; }
 
     public setVisible(v: boolean) {
-        this.chassisMesh.visible = v;
-        this.wheelMeshes.forEach(w => w.visible = v);
+        // Never fully hide — just show/hide wheels when parked vs driven
+        // Car body always stays visible so Tommy can be seen inside
+        this.chassisMesh.visible = true;
+        this.wheelMeshes.forEach(w => w.visible = true);
     }
 
     public getSpeedKmh(): number {

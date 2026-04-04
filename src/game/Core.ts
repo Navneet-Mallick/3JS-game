@@ -34,7 +34,8 @@ export class Core {
     // UI — cached once, never queried in the loop
     private modeBadge   = document.getElementById('mode-badge');
     private speedoEl    = document.getElementById('speedo-value');
-    private gearEl      = document.getElementById('gear-value');   // cached!
+    private gearEl      = document.getElementById('gear-value');
+    private speedoBox   = document.getElementById('speedometer');
     private lockPrompt  = document.getElementById('lock-prompt');
     private pauseScreen = document.getElementById('pause-screen');
     private enterPrompt = document.getElementById('enter-prompt');
@@ -97,6 +98,9 @@ export class Core {
             }
 
             this.minimap = new Minimap('minimap-canvas');
+
+            // Wire cheat speed boost to vehicle
+            this.player.onSpeedBoost = () => this.vehicle.boostSpeed();
 
             document.addEventListener('pointerlockchange', () => {
                 const locked = !!document.pointerLockElement;
@@ -163,6 +167,7 @@ export class Core {
             this.player.setPosition(vp.x + 2.5, vp.y + 1, vp.z);
             if (this.modeBadge) { this.modeBadge.textContent = 'ON FOOT'; this.modeBadge.style.color = '#00ff88'; }
             this.sound.stopEngine();
+            if (this.speedoBox) this.speedoBox.classList.remove('active');
         } else {
             // Inline distance check — no distanceTo allocation
             const pp = this.player.getPosition();
@@ -175,6 +180,7 @@ export class Core {
                 this.vehicle.setVisible(false);
                 if (this.modeBadge) { this.modeBadge.textContent = 'IN VEHICLE'; this.modeBadge.style.color = '#ffff00'; }
                 this.sound.startEngine();
+                if (this.speedoBox) this.speedoBox.classList.add('active');
             }
         }
     }
@@ -260,6 +266,14 @@ export class Core {
         // Player + vehicle
         this.player.update(dt);
         this.vehicle.update(dt);
+
+        // Keep Tommy visibly seated in car while driving
+        if (this.playerInVehicle) {
+            this.player.seatInVehicle(
+                this.vehicle.chassisMesh.position,
+                this.vehicle.chassisMesh.quaternion
+            );
+        }
 
         // Reference position for LOD
         const playerPos = this.playerInVehicle

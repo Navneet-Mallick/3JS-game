@@ -4,163 +4,202 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Neo-Noir City</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&display=swap" rel="stylesheet">
+    <title>Vice City</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #000; overflow: hidden; font-family: 'Outfit', sans-serif; }
+
+      /* ── Loading ── */
+      #loading-screen {
+        position: fixed; inset: 0; background: #000;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        z-index: 100; color: #fff;
+      }
+      .loader-text { font-size: 3rem; font-weight: 700; color: #ff6b35; letter-spacing: 4px; margin-bottom: 2rem; }
+      .loader-bar-bg { width: 300px; height: 4px; background: #222; border-radius: 2px; }
+      .loader-bar { height: 100%; width: 0%; background: #ff6b35; border-radius: 2px; transition: width 0.1s; }
+
+      /* ── Pointer lock prompt ── */
+      #lock-prompt {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+        display: none; flex-direction: column; align-items: center; justify-content: center;
+        z-index: 90; color: #fff; text-align: center; gap: 1rem;
+      }
+      #lock-prompt h2 { font-size: 2rem; color: #ff6b35; }
+      #lock-prompt p  { color: #aaa; font-size: 0.95rem; }
+
+      /* ── Pause ── */
+      #pause-screen {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+        display: none; flex-direction: column; align-items: center; justify-content: center;
+        z-index: 80; color: #fff; gap: 0.5rem;
+      }
+      #pause-screen.visible { display: flex; }
+      #pause-screen h2 { font-size: 2.5rem; color: #ff6b35; }
+      #pause-screen p  { color: #aaa; }
+
+      /* ── HUD ── */
+      .game-ui { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+
+      /* Crosshair */
+      .crosshair {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+        width: 16px; height: 16px;
+      }
+      .crosshair::before, .crosshair::after {
+        content: ''; position: absolute; background: rgba(255,255,255,0.8);
+      }
+      .crosshair::before { width: 2px; height: 16px; left: 7px; top: 0; }
+      .crosshair::after  { width: 16px; height: 2px; left: 0; top: 7px; }
+
+      /* Mode badge */
+      #mode-badge {
+        position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+        background: rgba(0,0,0,0.55); color: #00ff88; padding: 4px 16px;
+        border-radius: 4px; font-size: 0.8rem; font-weight: 700; letter-spacing: 2px;
+      }
+
+      /* Speedometer — bottom right */
+      #speedometer {
+        position: absolute; bottom: 20px; right: 20px;
+        background: rgba(0,0,0,0.6); border-radius: 8px; padding: 10px 16px;
+        color: #fff; text-align: center; min-width: 80px; display: none;
+      }
+      #speedometer.active { display: block; }
+      #speedo-value { font-size: 2rem; font-weight: 700; color: #ff6b35; line-height: 1; }
+      .speed-unit   { font-size: 0.65rem; color: #888; }
+      #gear-value   { font-size: 0.85rem; color: #ffcc00; margin-top: 2px; }
+
+      /* Minimap — bottom left */
+      .minimap-container {
+        position: absolute; bottom: 20px; left: 20px;
+        border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; overflow: hidden;
+      }
+      #minimap-canvas { display: block; width: 120px; height: 120px; }
+
+      /* Enter vehicle prompt */
+      #enter-prompt {
+        position: absolute; bottom: 160px; left: 50%; transform: translateX(-50%);
+        background: rgba(0,0,0,0.7); color: #fff; padding: 8px 20px;
+        border-radius: 6px; font-size: 0.9rem; display: none; align-items: center; gap: 8px;
+      }
+      #enter-prompt kbd {
+        background: #ff6b35; color: #000; padding: 2px 8px;
+        border-radius: 3px; font-weight: 700; font-size: 0.85rem;
+      }
+
+      /* Cheat notification */
+      #cheat-text {
+        position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+        background: rgba(0,0,0,0.75); color: #ffcc00; padding: 6px 20px;
+        border-radius: 4px; font-size: 0.9rem; font-weight: 700; letter-spacing: 1px;
+        opacity: 0; transition: opacity 0.4s; pointer-events: none;
+      }
+
+      /* Controls hint — top left, compact */
+      #controls-hint {
+        position: absolute; top: 16px; left: 16px;
+        background: rgba(0,0,0,0.55); color: #ccc;
+        padding: 10px 14px; border-radius: 6px; font-size: 0.72rem; line-height: 1.7;
+      }
+      #controls-hint b { color: #ff6b35; }
+
+      /* Cheats hint — toggle with Tab */
+      #cheats-hint {
+        position: absolute; top: 16px; right: 16px;
+        background: rgba(0,0,0,0.55); color: #ccc;
+        padding: 10px 14px; border-radius: 6px; font-size: 0.72rem; line-height: 1.8;
+        display: none;
+      }
+      #cheats-hint.visible { display: block; }
+      #cheats-hint b { color: #ffcc00; }
+      #cheats-toggle {
+        position: absolute; top: 16px; right: 16px;
+        background: rgba(0,0,0,0.55); color: #888;
+        padding: 4px 10px; border-radius: 4px; font-size: 0.7rem; cursor: pointer;
+        pointer-events: all;
+      }
+    </style>
   </head>
   <body>
     <div id="app">
 
-      <!-- Loading Screen -->
+      <!-- Loading -->
       <div id="loading-screen">
-        <h1 class="loader-text">Neo-Noir City</h1>
-        <div class="loader-bar-bg">
-          <div class="loader-bar" id="loader-bar"></div>
-        </div>
+        <h1 class="loader-text">VICE CITY</h1>
+        <div class="loader-bar-bg"><div class="loader-bar" id="loader-bar"></div></div>
       </div>
 
-      <!-- Pointer Lock Prompt -->
-      <div id="lock-prompt" style="display:none">
+      <!-- Pointer lock -->
+      <div id="lock-prompt">
         <h2>Click to Play</h2>
-        <p>Mouse to look &nbsp;·&nbsp; WASD to move &nbsp;·&nbsp; F to enter car &nbsp;·&nbsp; M to mute</p>
+        <p>WASD / Arrows — Move &nbsp;·&nbsp; Mouse — Look &nbsp;·&nbsp; F — Enter/Exit Car &nbsp;·&nbsp; M — Mute</p>
       </div>
 
-      <!-- Pause Screen -->
+      <!-- Pause -->
       <div id="pause-screen">
-        <h2>Paused</h2>
+        <h2>PAUSED</h2>
         <p>Click to resume</p>
       </div>
 
-      <!-- Game UI Overlay -->
+      <!-- HUD -->
       <div class="game-ui">
         <div class="crosshair"></div>
+        <div id="mode-badge">ON FOOT</div>
 
-        <!-- Top HUD -->
-        <div class="hud-top">
-          <div class="hud-badge" id="mode-badge">On Foot</div>
-        </div>
-
-        <!-- Score display -->
-        <div class="score-hud">
-          <div id="score-value">0</div>
-          <div class="score-label">SCORE</div>
-          <div id="multiplier-value" class="multiplier">x1</div>
-        </div>
-
-        <!-- Money display -->
-        <div class="money-display" id="money-display">
-          <div id="money-value">$1,000</div>
-          <div class="money-label">CASH</div>
-        </div>
-
-        <!-- Combo flash -->
-        <div id="combo-text" class="combo-text"></div>
-
-        <!-- Mission panel -->
-        <div id="mission-panel" style="display:none">
-          <div id="mission-title" class="mission-title">MISSION</div>
-          <div id="mission-desc"  class="mission-desc">...</div>
-          <div id="mission-dist"  class="mission-stat" style="display:none">0m</div>
-          <div id="mission-timer" class="mission-stat" style="display:none">0s</div>
-        </div>
-
-        <!-- Mission complete flash -->
-        <div id="mission-flash" class="mission-flash"></div>
-
-        <!-- Speedometer -->
-        <div class="speedometer" id="speedometer">
-          <div class="speed-value" id="speedo-value">0</div>
+        <!-- Speedometer (shown in vehicle) -->
+        <div id="speedometer">
+          <div id="speedo-value">0</div>
           <div class="speed-unit">km/h</div>
-          <div class="gear-display" id="gear-value">G1</div>
-          <div class="ammo-display" id="ammo-display">30/30</div>
+          <div id="gear-value">G1</div>
         </div>
 
         <!-- Minimap -->
         <div class="minimap-container">
-          <canvas id="minimap-canvas"></canvas>
+          <canvas id="minimap-canvas" width="120" height="120"></canvas>
         </div>
 
-        <!-- Instructions -->
-        <div class="instructions">
-          <h3>🎮 CONTROLS</h3>
-          <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move / Drive / Ride</p>
-          <p><kbd>Space</kbd> Jump / Handbrake / Shoot / Lean</p>
-          <p><kbd>Shift</kbd> Sprint / Motorcycle Boost</p>
-          <p><kbd>F</kbd> Enter/Exit Vehicles / Buildings</p>
-          <p><kbd>E</kbd> Interact / Purchase Items</p>
-          <p><kbd>V</kbd> Toggle Camera View</p>
-          <p><kbd>R</kbd> Reload Weapon</p>
-          <p><kbd>F5</kbd> Quick Save / <kbd>F9</kbd> Quick Load</p>
-          <p><kbd>Mouse</kbd> Look Around / Aim Weapon</p>
-          <p><kbd>M</kbd> Mute / Unmute</p>
-
-          <h3>🏍️ VEHICLES</h3>
-          <p>⚡ <strong>8 Motorcycles</strong> - Fast, agile, boost with Shift</p>
-          <p>🚗 <strong>Multiple Cars</strong> - Sedan, Sports, Truck, Police</p>
-          <p>🏢 <strong>Enter Buildings</strong> - Apartments, Shops, Garages</p>
-          <p>💰 <strong>Vehicle Theft</strong> - Earn 30% of vehicle value</p>
-          <p>🔧 <strong>Vehicle Damage</strong> - Realistic deformation system</p>
-
-          <h3>💰 ECONOMY SYSTEM</h3>
-          <p>💵 <strong>Starting Cash</strong> - $1,000</p>
-          <p>💎 <strong>Collectibles</strong> - +$100 each</p>
-          <p>🔥 <strong>Destruction</strong> - +$50 per box</p>
-          <p>⚡ <strong>Power-ups</strong> - +$200 each</p>
-          <p>🏆 <strong>Missions</strong> - +$1,000 completion</p>
-          <p>🚗 <strong>Vehicle Prices</strong> - $12K-$45K</p>
-          <p>🔫 <strong>Weapons</strong> - $500-$3,000</p>
-          <p>🏠 <strong>Properties</strong> - $25K-$100K</p>
-
-          <h3>👮 POLICE & WANTED</h3>
-          <p>⭐ <strong>6-Star System</strong> - Progressive police response</p>
-          <p>� <strong>Enhanced AI</strong> - Tactics, coordination, pursuit</p>
-          <p>🚁 <strong>Helicopter Support</strong> - Air surveillance (3+ stars)</p>
-          <p>🚨 <strong>SWAT Response</strong> - Tactical teams (5+ stars)</p>
-          <p>🛑 <strong>Roadblocks</strong> - Strategic police positioning</p>
-          <p>🔫 <strong>Shooting Crimes</strong> - Raises wanted level</p>
-
-          <h3>🏢 BUILDING INTERIORS</h3>
-          <p>🏠 <strong>8 Buildings</strong> - Enterable locations</p>
-          <p>🏢 <strong>Apartments</strong> - Safe houses, save points</p>
-          <p>🏪 <strong>Shops</strong> - Buy weapons, items</p>
-          <p>🔧 <strong>Garages</strong> - Vehicle customization</p>
-          <p>🏬 <strong>Offices</strong> - Mission hubs, businesses</p>
-
-          <h3>💾 SAVE SYSTEM</h3>
-          <p>� <strong>Auto-Save</strong> - Every 60 seconds</p>
-          <p>⚡ <strong>Quick Save</strong> - F5 key</p>
-          <p>📂 <strong>Quick Load</strong> - F9 key</p>
-          <p>📊 <strong>Statistics</strong> - Play time, money, progress</p>
-          <p>🔄 <strong>Multiple Slots</strong> - Main, quick, backup saves</p>
-
-          <h3>🎯 OBJECTIVES</h3>
-          <p>💎 <strong>Collect Gems</strong> - +$100, +100 points</p>
-          <p>🔥 <strong>Destroy Boxes</strong> - +$50, +50 points</p>
-          <p>⚡ <strong>Grab Power-ups</strong> - +$200, +200 points</p>
-          <p>� <strong>Complete Missions</strong> - +$1,000, big points</p>
-          <p>🔫 <strong>Combat System</strong> - Shoot enemies, earn rewards</p>
-          <p>🚗 <strong>Steal Vehicles</strong> - Sell for cash</p>
-
-          <h3>💡 10/10 FEATURES</h3>
-          <p>• <strong>Living City</strong> - 12 pedestrians, 4 police, 8 traffic, 8 motorcycles</p>
-          <p>• <strong>Full Economy</strong> - Money system, shops, property ownership</p>
-          <p>• <strong>Advanced Police</strong> - AI tactics, coordination, air support</p>
-          <p>• <strong>Building Interiors</strong> - 8 enterable buildings with unique interiors</p>
-          <p>• <strong>Save System</strong> - Auto-save, quick save/load, statistics</p>
-          <p>• <strong>Vehicle Variety</strong> - Cars, motorcycles, damage system</p>
-          <p>• <strong>Combat System</strong> - Weapons, ammo, reload mechanics</p>
-          <p>• <strong>GTA Character</strong> - Visible protagonist with proper model</p>
-          <p>• <strong>Physics</strong> - Realistic driving, movement, collisions</p>
-          <p>• <strong>Open World</strong> - Free exploration, no boundaries</p>
+        <!-- Enter prompt -->
+        <div id="enter-prompt">
+          Press <kbd>F</kbd> to enter vehicle
         </div>
 
-        <!-- Near-vehicle prompt -->
-        <div id="enter-prompt" style="display:none">
-          <span>Press <kbd>F</kbd> to enter vehicle</span>
+        <!-- Cheat notification -->
+        <div id="cheat-text"></div>
+
+        <!-- Controls hint -->
+        <div id="controls-hint">
+          <b>WASD</b> / <b>↑↓←→</b> Move &amp; Drive<br>
+          <b>Shift</b> Sprint &nbsp; <b>Space</b> Jump / Brake<br>
+          <b>F</b> Enter / Exit vehicle<br>
+          <b>V</b> Camera view &nbsp; <b>M</b> Mute<br>
+          <b>Tab</b> Show cheats
+        </div>
+
+        <!-- Cheats panel (Tab to toggle) -->
+        <div id="cheats-hint">
+          <b>GTA VICE CITY CHEATS</b><br>
+          <b>ASPIRINE</b> — Full health<br>
+          <b>PRECIOUSPROTECTION</b> — Armor<br>
+          <b>BIGBANG</b> — Speed boost<br>
+          <b>LEAVEMEALONE</b> — Clear wanted<br>
+          <b>CANTSEEME</b> — Super speed 30s<br>
+          <b>YOUWONTTAKEMEALIVE</b> — Super jump<br>
+          <b>CHASESTAT</b> — Max wanted level
         </div>
       </div>
     </div>
+
+    <script>
+      // Tab toggles cheats panel
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          document.getElementById('cheats-hint').classList.toggle('visible');
+        }
+      });
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
