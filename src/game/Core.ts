@@ -1,17 +1,17 @@
 import * as CANNON from 'cannon-es';
 import * as THREE  from 'three';
-import { GameScene }    from './Scene';
-import { Physics }      from './Physics';
-import { Player }       from './Player';
-import { Vehicle }      from './Vehicle';
-import { City }         from './City';
-import { Minimap }      from './Minimap';
-import { Input }        from './Input';
-import { TrafficCar }   from './TrafficCar';
-import { Sound }        from './Sound';
-import { GamepadInput } from './Gamepad';
+import { GameScene }     from './Scene';
+import { Physics }       from './Physics';
+import { Player }        from './Player';
+import { Vehicle }       from './Vehicle';
+import { City }          from './City';
+import { Minimap }       from './Minimap';
+import { Input }         from './Input';
+import { TrafficCar }    from './TrafficCar';
+import { Sound }         from './Sound';
+import { GamepadInput }  from './Gamepad';
 import { TouchControls } from './TouchControls';
-import { Pedestrian }   from './Pedestrian';
+import { Pedestrian }    from './Pedestrian';
 
 const _dp = new THREE.Vector3();
 
@@ -21,8 +21,8 @@ export class Core {
     private player:      Player;
     private vehicle:     Vehicle;
     private city:        City;
-    private traffic:     TrafficCar[]  = [];
-    private pedestrians: Pedestrian[]  = [];
+    private traffic:     TrafficCar[] = [];
+    private pedestrians: Pedestrian[] = [];
     private minimap:     Minimap;
     private sound:       Sound;
 
@@ -145,6 +145,7 @@ export class Core {
         requestAnimationFrame((t) => this.animate(t));
     }
 
+    // ── Enter / Exit vehicle ──────────────────────────────────────────────────
     private handleEnterExit() {
         const pressed = Input.isKeyPressed('f') ||
             (GamepadInput.connected && GamepadInput.btnXPressed()) ||
@@ -152,13 +153,13 @@ export class Core {
         if (!pressed) return;
 
         if (this.playerInVehicle) {
-            // EXIT vehicle
+            // EXIT
             this.playerInVehicle = false;
-            this.player.setInVehicle(false);
+            this.player.setInVehicle(false);   // shows Tommy, restores camera
             this.vehicle.isOccupied = false;
             this.vehicle.setVisible(true);
-            this.player.mesh.visible = true;
 
+            // Spawn Tommy beside the car
             const vp = this.vehicle.getPosition();
             this.player.setPosition(vp.x + 2.5, vp.y + 1, vp.z);
 
@@ -170,17 +171,16 @@ export class Core {
             if (this.speedoBox) this.speedoBox.classList.remove('active');
 
         } else {
-            // ENTER vehicle — only if close enough
+            // ENTER — only if close enough
             const pp = this.player.getPosition();
             const vp = this.vehicle.getPosition();
             _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
 
             if (_dp.lengthSq() < 25) {
                 this.playerInVehicle = true;
-                this.player.setInVehicle(true);
-                this.player.mesh.visible = false; // hide Tommy
-                this.vehicle.isOccupied  = true;
-                this.vehicle.setVisible(true);    // keep car visible
+                this.player.setInVehicle(true);    // hides Tommy, stops player camera
+                this.vehicle.isOccupied = true;    // vehicle now controls camera
+                this.vehicle.setVisible(true);
 
                 if (this.modeBadge) {
                     this.modeBadge.textContent = 'IN VEHICLE';
@@ -192,9 +192,13 @@ export class Core {
         }
     }
 
+    // ── Pickups & destructibles ───────────────────────────────────────────────
     private handlePickups(now: number) {
-        const pos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
+        const pos = this.playerInVehicle
+            ? this.vehicle.getPosition()
+            : this.player.getPosition();
 
+        // Collectibles
         const cols = this.city.getCollectibles();
         for (let i = 0; i < cols.length; i++) {
             const c = cols[i];
@@ -210,6 +214,7 @@ export class Core {
             }
         }
 
+        // Power-ups
         const pups = this.city.getPowerUps();
         for (let i = 0; i < pups.length; i++) {
             const p = pups[i];
@@ -226,6 +231,7 @@ export class Core {
             }
         }
 
+        // Destructibles — only when driving fast
         if (this.playerInVehicle) {
             const spd  = this.vehicle.getSpeedKmh();
             const dest = this.city.getDestructibles();
@@ -245,9 +251,11 @@ export class Core {
         }
     }
 
+    // ── Main loop ─────────────────────────────────────────────────────────────
     private animate(time: number) {
         requestAnimationFrame((t) => this.animate(t));
 
+        // Handle F key even when paused
         this.handleEnterExit();
 
         if (this.paused) {
@@ -263,24 +271,18 @@ export class Core {
 
         this.physics.update(dt);
 
-        // ── KEY FIX: only update player when on foot ──
+        // ── KEY FIX: player and vehicle are mutually exclusive ──
         if (!this.playerInVehicle) {
-            this.player.update(dt);
+            this.player.update(dt);   // player controls camera on foot
         }
-        this.vehicle.update(dt);
+        this.vehicle.update(dt);      // vehicle controls camera when occupied
 
-        // Seat Tommy visibly inside car while driving
-        if (this.playerInVehicle) {
-            this.player.seatInVehicle(
-                this.vehicle.chassisMesh.position,
-                this.vehicle.chassisMesh.quaternion
-            );
-        }
-
+        // Reference position for LOD and UI
         const playerPos = this.playerInVehicle
             ? this.vehicle.getPosition()
             : this.player.getPosition();
 
+        // Traffic LOD
         for (let i = 0; i < this.traffic.length; i++) {
             const t = this.traffic[i];
             _dp.set(
@@ -288,9 +290,10 @@ export class Core {
                 0,
                 t.getPosition().z - playerPos.z
             );
-            if (_dp.lengthSq() < 16900) t.update(dt);
+            if (_dp.lengthSq() < 16900) t.update(dt); // 130²
         }
 
+        // Pedestrian LOD
         for (let i = 0; i < this.pedestrians.length; i++) {
             const p = this.pedestrians[i];
             _dp.set(
@@ -298,18 +301,20 @@ export class Core {
                 0,
                 p.getPosition().z - playerPos.z
             );
-            const near = _dp.lengthSq() < 3600;
+            const near = _dp.lengthSq() < 3600; // 60²
             p.mesh.visible = near;
             if (near) p.update(dt, playerPos);
         }
 
         this.handlePickups(now);
 
+        // Speedometer
         if (this.playerInVehicle) {
             if (this.speedoEl) this.speedoEl.textContent = String(this.vehicle.getSpeedKmh());
             if (this.gearEl)   this.gearEl.textContent   = `G${this.vehicle.getGear()}`;
         }
 
+        // Enter prompt
         if (this.enterPrompt) {
             if (!this.playerInVehicle) {
                 const pp = this.player.getPosition();

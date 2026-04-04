@@ -48,11 +48,14 @@ export class Player {
     private playerInVehicle = false;
 
     // Cheat system
-    private cheatBuffer = '';
+    private cheatBuffer  = '';
     private cheatTimeout = 0;
-    public  health  = 100;
-    public  armor   = 0;
+    public  health      = 100;
+    public  armor       = 0;
     public  wantedLevel = 0;
+
+    // Callback wired by Core
+    public onSpeedBoost: (() => void) | null = null;
 
     constructor(
         scene:  THREE.Scene,
@@ -78,23 +81,22 @@ export class Player {
         this.camera.position.set(0, 5, this.ORBIT_DIST);
         this.camera.lookAt(0, 1, 0);
 
-        // Cheat key listener
         window.addEventListener('keydown', (e) => this.handleCheat(e.key));
     }
 
-    // ── Tommy Vercetti — teal hawaiian shirt, dark slicked hair, pearl necklace ──
+    // ── Tommy Vercetti model ──────────────────────────────────────────────────
     private buildModel(): THREE.Group {
         const g = new THREE.Group();
 
-        const skin    = new THREE.MeshLambertMaterial({ color: 0xc8845a });  // tan skin
-        const hair    = new THREE.MeshLambertMaterial({ color: 0x120a00 });  // very dark brown
-        const shirt   = new THREE.MeshLambertMaterial({ color: 0x2ab8b0 });  // teal/cyan hawaiian
-        const shirtD  = new THREE.MeshLambertMaterial({ color: 0x1e8a84 });  // darker teal for depth
-        const pants   = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });  // dark trousers
-        const shoes   = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });  // black shoes
-        const eyeM    = new THREE.MeshLambertMaterial({ color: 0x050505 });
-        const browM   = new THREE.MeshLambertMaterial({ color: 0x1a0a00 });
-        const pearl   = new THREE.MeshLambertMaterial({ color: 0xf0ece0 });  // pearl necklace
+        const skin   = new THREE.MeshLambertMaterial({ color: 0xc8845a });
+        const hair   = new THREE.MeshLambertMaterial({ color: 0x120a00 });
+        const shirt  = new THREE.MeshLambertMaterial({ color: 0x2ab8b0 });
+        const shirtD = new THREE.MeshLambertMaterial({ color: 0x1e8a84 });
+        const pants  = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+        const shoes  = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
+        const eyeM   = new THREE.MeshLambertMaterial({ color: 0x050505 });
+        const browM  = new THREE.MeshLambertMaterial({ color: 0x1a0a00 });
+        const pearl  = new THREE.MeshLambertMaterial({ color: 0xf0ece0 });
 
         const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x=0, y=0, z=0) => {
             const m = new THREE.Mesh(geo, mat);
@@ -103,113 +105,100 @@ export class Player {
             return m;
         };
 
-        // ── HEAD ──
-        // Main head — slightly wider jaw
-        add(new THREE.BoxGeometry(0.38, 0.42, 0.36), skin, 0, 1.76, 0);
-        // Jaw/chin — slightly wider at bottom
-        add(new THREE.BoxGeometry(0.34, 0.12, 0.34), skin, 0, 1.56, 0);
-        // Forehead slightly narrower
-        add(new THREE.BoxGeometry(0.36, 0.10, 0.34), skin, 0, 1.94, 0);
+        // HEAD
+        add(new THREE.BoxGeometry(0.38, 0.42, 0.36), skin,  0, 1.76, 0);
+        add(new THREE.BoxGeometry(0.34, 0.12, 0.34), skin,  0, 1.56, 0);
+        add(new THREE.BoxGeometry(0.36, 0.10, 0.34), skin,  0, 1.94, 0);
 
-        // ── HAIR — slicked back, dark, flat top ──
-        add(new THREE.BoxGeometry(0.38, 0.05, 0.32), hair, 0, 2.00, -0.01);   // top flat
-        add(new THREE.BoxGeometry(0.36, 0.18, 0.06), hair, 0, 1.92, -0.17);   // back sweep
-        add(new THREE.BoxGeometry(0.05, 0.30, 0.30), hair, -0.185, 1.88, 0);  // left side
-        add(new THREE.BoxGeometry(0.05, 0.30, 0.30), hair,  0.185, 1.88, 0);  // right side
-        // Widow's peak / front hairline
-        add(new THREE.BoxGeometry(0.20, 0.04, 0.06), hair, 0, 1.98, 0.16);
+        // HAIR
+        add(new THREE.BoxGeometry(0.38, 0.05, 0.32), hair,  0,      2.00, -0.01);
+        add(new THREE.BoxGeometry(0.36, 0.18, 0.06), hair,  0,      1.92, -0.17);
+        add(new THREE.BoxGeometry(0.05, 0.30, 0.30), hair, -0.185,  1.88,  0);
+        add(new THREE.BoxGeometry(0.05, 0.30, 0.30), hair,  0.185,  1.88,  0);
+        add(new THREE.BoxGeometry(0.20, 0.04, 0.06), hair,  0,      1.98,  0.16);
 
-        // ── FACE DETAILS ──
-        // Brow ridge — strong brows like Tommy
+        // FACE
         add(new THREE.BoxGeometry(0.14, 0.04, 0.05), browM, -0.10, 1.84, 0.18);
         add(new THREE.BoxGeometry(0.14, 0.04, 0.05), browM,  0.10, 1.84, 0.18);
-        // Eyes
         add(new THREE.BoxGeometry(0.08, 0.055, 0.04), eyeM, -0.10, 1.77, 0.18);
         add(new THREE.BoxGeometry(0.08, 0.055, 0.04), eyeM,  0.10, 1.77, 0.18);
-        // Nose bridge
-        add(new THREE.BoxGeometry(0.06, 0.10, 0.06), skin, 0, 1.70, 0.18);
-        // Mouth line
-        add(new THREE.BoxGeometry(0.12, 0.025, 0.04), browM, 0, 1.62, 0.18);
-        // Ears
-        add(new THREE.BoxGeometry(0.04, 0.10, 0.08), skin, -0.20, 1.74, 0);
-        add(new THREE.BoxGeometry(0.04, 0.10, 0.08), skin,  0.20, 1.74, 0);
+        add(new THREE.BoxGeometry(0.06, 0.10, 0.06), skin,   0,    1.70, 0.18);
+        add(new THREE.BoxGeometry(0.12, 0.025, 0.04), browM,  0,   1.62, 0.18);
+        add(new THREE.BoxGeometry(0.04, 0.10, 0.08), skin,  -0.20, 1.74, 0);
+        add(new THREE.BoxGeometry(0.04, 0.10, 0.08), skin,   0.20, 1.74, 0);
 
-        // ── NECK ──
+        // NECK
         add(new THREE.BoxGeometry(0.20, 0.18, 0.20), skin, 0, 1.48, 0);
 
-        // ── PEARL NECKLACE ──
+        // PEARL NECKLACE
         for (let i = 0; i < 8; i++) {
-            const a = (i / 8) * Math.PI; // front half arc
-            const nx = Math.sin(a - Math.PI/2) * 0.12;
-            const ny = 1.42;
-            const nz = Math.cos(a - Math.PI/2) * 0.10 + 0.05;
-            add(new THREE.BoxGeometry(0.04, 0.04, 0.04), pearl, nx, ny, nz);
+            const a  = (i / 8) * Math.PI;
+            const nx = Math.sin(a - Math.PI / 2) * 0.12;
+            const nz = Math.cos(a - Math.PI / 2) * 0.10 + 0.05;
+            add(new THREE.BoxGeometry(0.04, 0.04, 0.04), pearl, nx, 1.42, nz);
         }
 
-        // ── TORSO — open collar teal hawaiian shirt ──
-        // Main shirt body
+        // TORSO — teal hawaiian shirt
         const torso = add(new THREE.BoxGeometry(0.60, 0.72, 0.30), shirt, 0, 1.16, 0);
         torso.castShadow = true;
-        // Shirt sides slightly darker for depth
         add(new THREE.BoxGeometry(0.06, 0.70, 0.30), shirtD, -0.30, 1.16, 0);
         add(new THREE.BoxGeometry(0.06, 0.70, 0.30), shirtD,  0.30, 1.16, 0);
-        // Open collar V — skin showing
-        add(new THREE.BoxGeometry(0.16, 0.22, 0.32), skin, 0, 1.44, 0);
-        // Collar flaps
+        add(new THREE.BoxGeometry(0.16, 0.22, 0.32), skin,    0,    1.44, 0);
         add(new THREE.BoxGeometry(0.12, 0.20, 0.32), shirtD, -0.14, 1.44, 0);
         add(new THREE.BoxGeometry(0.12, 0.20, 0.32), shirtD,  0.14, 1.44, 0);
-        // Shirt button line
-        add(new THREE.BoxGeometry(0.03, 0.50, 0.32), shirtD, 0, 1.10, 0);
+        add(new THREE.BoxGeometry(0.03, 0.50, 0.32), shirtD,  0,    1.10, 0);
 
-        // ── ARMS — short sleeves (hawaiian shirt) ──
+        // ARMS — short sleeves
         this.leftArm  = add(new THREE.BoxGeometry(0.17, 0.30, 0.17), shirt, -0.40, 1.38, 0) as THREE.Mesh;
         this.rightArm = add(new THREE.BoxGeometry(0.17, 0.30, 0.17), shirt,  0.40, 1.38, 0) as THREE.Mesh;
-        // Forearms — bare skin
         add(new THREE.BoxGeometry(0.15, 0.32, 0.15), skin, -0.40, 1.08, 0);
         add(new THREE.BoxGeometry(0.15, 0.32, 0.15), skin,  0.40, 1.08, 0);
-        // Hands
         add(new THREE.BoxGeometry(0.14, 0.14, 0.14), skin, -0.40, 0.88, 0);
         add(new THREE.BoxGeometry(0.14, 0.14, 0.14), skin,  0.40, 0.88, 0);
 
-        // ── BELT ──
-        add(new THREE.BoxGeometry(0.60, 0.07, 0.31), new THREE.MeshLambertMaterial({ color: 0x111111 }), 0, 0.82, 0);
-        add(new THREE.BoxGeometry(0.10, 0.07, 0.06), new THREE.MeshLambertMaterial({ color: 0x888844, emissive: new THREE.Color(0x444422) }), 0, 0.82, 0.16);
+        // BELT
+        add(new THREE.BoxGeometry(0.60, 0.07, 0.31),
+            new THREE.MeshLambertMaterial({ color: 0x111111 }), 0, 0.82, 0);
+        add(new THREE.BoxGeometry(0.10, 0.07, 0.06),
+            new THREE.MeshLambertMaterial({ color: 0x888844, emissive: new THREE.Color(0x444422) }), 0, 0.82, 0.16);
 
-        // ── LEGS — dark trousers ──
+        // LEGS
         this.leftLeg  = add(new THREE.BoxGeometry(0.21, 0.72, 0.21), pants, -0.15, 0.42, 0) as THREE.Mesh;
         this.rightLeg = add(new THREE.BoxGeometry(0.21, 0.72, 0.21), pants,  0.15, 0.42, 0) as THREE.Mesh;
 
-        // ── SHOES ──
+        // SHOES
         add(new THREE.BoxGeometry(0.22, 0.10, 0.32), shoes, -0.15, 0.05, 0.04);
         add(new THREE.BoxGeometry(0.22, 0.10, 0.32), shoes,  0.15, 0.05, 0.04);
 
         return g;
     }
 
-    // ── GTA Vice City cheats ──────────────────────────────────────────────────
+    // ── Cheat codes ───────────────────────────────────────────────────────────
     private readonly CHEATS: Record<string, () => void> = {
-        'ASPIRINE':    () => { this.health = 100; this.showCheat('HEALTH RESTORED'); },
-        'PRECIOUSPROTECTION': () => { this.armor = 100; this.showCheat('ARMOR ADDED'); },
-        'BIGBANG':     () => { this.speedBoost(); this.showCheat('SPEED BOOST!'); },
-        'LEAVEMEALONE': () => { this.wantedLevel = 0; this.showCheat('WANTED LEVEL CLEARED'); },
-        'CANTSEEME':   () => { this.moveSpeed = 14; setTimeout(() => this.moveSpeed = 6, 30000); this.showCheat('SUPER SPEED 30s'); },
-        'CHASESTAT':   () => { this.wantedLevel = 5; this.showCheat('WANTED LEVEL MAX'); },
-        'YOUWONTTAKEMEALIVE': () => { this.jumpForce = 18; setTimeout(() => this.jumpForce = 7, 20000); this.showCheat('SUPER JUMP 20s'); },
+        'ASPIRINE':           () => { this.health = 100;        this.showCheat('HEALTH RESTORED'); },
+        'PRECIOUSPROTECTION': () => { this.armor  = 100;        this.showCheat('ARMOR ADDED'); },
+        'BIGBANG':            () => { this.speedBoost();        this.showCheat('SPEED BOOST!'); },
+        'LEAVEMEALONE':       () => { this.wantedLevel = 0;     this.showCheat('WANTED CLEARED'); },
+        'CANTSEEME':          () => {
+            this.moveSpeed = 14;
+            setTimeout(() => this.moveSpeed = 6, 30000);
+            this.showCheat('SUPER SPEED 30s');
+        },
+        'YOUWONTTAKEMEALIVE': () => {
+            this.jumpForce = 18;
+            setTimeout(() => this.jumpForce = 7, 20000);
+            this.showCheat('SUPER JUMP 20s');
+        },
     };
-
-    private speedBoostCb: (() => void) | null = null;
-    public  onSpeedBoost: (() => void) | null = null;
 
     private speedBoost() {
         if (this.onSpeedBoost) this.onSpeedBoost();
     }
 
     private handleCheat(key: string) {
-        // Only letters
         if (key.length !== 1) return;
         this.cheatBuffer += key.toUpperCase();
         if (this.cheatBuffer.length > 20) this.cheatBuffer = this.cheatBuffer.slice(-20);
-
         for (const code of Object.keys(this.CHEATS)) {
             if (this.cheatBuffer.endsWith(code)) {
                 this.CHEATS[code]();
@@ -222,7 +211,7 @@ export class Player {
     private showCheat(msg: string) {
         const el = document.getElementById('cheat-text');
         if (!el) return;
-        el.textContent = msg;
+        el.textContent   = msg;
         el.style.opacity = '1';
         clearTimeout(this.cheatTimeout);
         this.cheatTimeout = window.setTimeout(() => { el.style.opacity = '0'; }, 3000);
@@ -230,15 +219,13 @@ export class Player {
 
     // ── Update ────────────────────────────────────────────────────────────────
     public update(dt: number) {
-        // When in vehicle — keep mesh visible, position inside car
-        if (this.playerInVehicle) {
-            this.mesh.visible = true;
-            return; // position is set by Core when entering vehicle
-        }
+        // ── KEY FIX: when in vehicle, do absolutely nothing ──
+        if (this.playerInVehicle) return;
 
         if (!this.visible) { this.mesh.visible = false; return; }
         this.mesh.visible = true;
 
+        // Mouse look
         this.yaw   -= Input.movementX * 0.0025;
         this.pitch -= Input.movementY * 0.0025;
         this.pitch  = Math.max(this.MIN_PITCH, Math.min(this.MAX_PITCH, this.pitch));
@@ -272,20 +259,33 @@ export class Player {
             this.body.velocity.z *= 0.7;
         }
 
+        // Ground clamp
         if (this.body.position.y < 1.5) {
             this.body.position.y = 1.5;
             this.body.velocity.y = 0;
-            this.onGround = true; this.groundTimer = 0.1;
+            this.onGround = true;
+            this.groundTimer = 0.1;
         }
 
+        // Jump
         if (Input.isKeyDown(' ') && this.onGround) {
             this.body.velocity.y = this.jumpForce;
-            this.onGround = false; this.groundTimer = 0;
+            this.onGround    = false;
+            this.groundTimer = 0;
         }
-        if (this.groundTimer > 0) { this.groundTimer -= dt; if (this.groundTimer <= 0) this.onGround = false; }
+        if (this.groundTimer > 0) {
+            this.groundTimer -= dt;
+            if (this.groundTimer <= 0) this.onGround = false;
+        }
 
-        this.mesh.position.set(this.body.position.x, this.body.position.y - 1.0, this.body.position.z);
+        // Sync mesh to physics
+        this.mesh.position.set(
+            this.body.position.x,
+            this.body.position.y - 1.0,
+            this.body.position.z
+        );
 
+        // Weapon
         _weaponPos.set(this.body.position.x, this.body.position.y + 0.3, this.body.position.z);
         _euler.set(this.pitch, this.yaw, 0);
         _weaponQ.setFromEuler(_euler);
@@ -293,14 +293,18 @@ export class Player {
         this.weapon.setVisible(true);
         this.weapon.update(dt, _weaponPos, _weaponQ);
 
+        // Walk animation
         if (moving) {
             this.animTime += dt * (sprinting ? 16 : 10);
             this.bobTime  += dt * (sprinting ? 16 : 10);
             const s = Math.sin(this.animTime) * 0.5;
-            this.leftLeg.rotation.x  =  s; this.rightLeg.rotation.x = -s;
-            this.leftArm.rotation.x  = -s * 0.5; this.rightArm.rotation.x = s * 0.5;
+            this.leftLeg.rotation.x  =  s;
+            this.rightLeg.rotation.x = -s;
+            this.leftArm.rotation.x  = -s * 0.5;
+            this.rightArm.rotation.x =  s * 0.5;
         } else {
-            this.animTime = 0; this.bobTime = 0;
+            this.animTime = 0;
+            this.bobTime  = 0;
             const t = Math.min(1, 10 * dt);
             this.leftLeg.rotation.x  = THREE.MathUtils.lerp(this.leftLeg.rotation.x,  0, t);
             this.rightLeg.rotation.x = THREE.MathUtils.lerp(this.rightLeg.rotation.x, 0, t);
@@ -313,12 +317,22 @@ export class Player {
 
     // ── Camera ────────────────────────────────────────────────────────────────
     private updateCamera(moving: boolean, sprinting: boolean) {
-        const bob = moving ? Math.sin(this.bobTime * 0.5) * (sprinting ? 0.04 : 0.02) : 0;
+        const bob = moving
+            ? Math.sin(this.bobTime * 0.5) * (sprinting ? 0.04 : 0.02)
+            : 0;
 
         if (this.firstPerson) {
-            _headPos.set(this.mesh.position.x, this.mesh.position.y + 1.72, this.mesh.position.z);
+            _headPos.set(
+                this.mesh.position.x,
+                this.mesh.position.y + 1.72,
+                this.mesh.position.z
+            );
             this.camera.position.copy(_headPos);
-            _lookDir.set(Math.sin(this.yaw)*Math.cos(this.pitch), Math.sin(-this.pitch), Math.cos(this.yaw)*Math.cos(this.pitch));
+            _lookDir.set(
+                Math.sin(this.yaw) * Math.cos(this.pitch),
+                Math.sin(-this.pitch),
+                Math.cos(this.yaw) * Math.cos(this.pitch)
+            );
             _headPos.add(_lookDir);
             this.camera.lookAt(_headPos);
             this.mesh.visible = false;
@@ -326,13 +340,15 @@ export class Player {
         }
 
         this.mesh.visible = true;
-        _camTarget.set(this.mesh.position.x, this.mesh.position.y + 0.9 + bob, this.mesh.position.z);
-        const sinY = Math.sin(this.yaw), cosY = Math.cos(this.yaw);
-        const cosP = Math.cos(this.pitch), sinP = Math.sin(this.pitch);
+        _camTarget.set(
+            this.mesh.position.x,
+            this.mesh.position.y + 0.9 + bob,
+            this.mesh.position.z
+        );
         _camPos.set(
-            _camTarget.x + this.ORBIT_DIST * sinY * cosP,
-            _camTarget.y + this.ORBIT_DIST * sinP,
-            _camTarget.z + this.ORBIT_DIST * cosY * cosP
+            _camTarget.x + this.ORBIT_DIST * Math.sin(this.yaw) * Math.cos(this.pitch),
+            _camTarget.y + this.ORBIT_DIST * Math.sin(this.pitch),
+            _camTarget.z + this.ORBIT_DIST * Math.cos(this.yaw) * Math.cos(this.pitch)
         );
         this.camera.position.lerp(_camPos, sprinting ? 0.18 : 0.12);
         this.camera.lookAt(_camTarget);
@@ -347,27 +363,19 @@ export class Player {
         this.mesh.position.set(x, y - 1.0, z);
     }
 
-    // Place Tommy visibly in the driver seat
+    // ── KEY FIX: properly hand off control to vehicle ────────────────────────
     public setInVehicle(inVehicle: boolean) {
         this.playerInVehicle = inVehicle;
-        this.weapon.setVisible(false);
-        if (!inVehicle) {
-            this.visible = true;
+        if (inVehicle) {
+            this.mesh.visible = false;  // hide Tommy
+            this.weapon.setVisible(false);
+        } else {
+            this.mesh.visible = true;   // show Tommy
+            this.visible      = true;
             this.weapon.setVisible(true);
         }
     }
 
-    // Called every frame by Core when in vehicle to keep Tommy seated
-    public seatInVehicle(carPos: THREE.Vector3, carQuat: THREE.Quaternion) {
-        // Sit Tommy in driver seat — offset left and up from car centre
-        const offset = new THREE.Vector3(-0.45, 0.55, 0.3);
-        offset.applyQuaternion(carQuat);
-        this.mesh.position.set(carPos.x + offset.x, carPos.y + offset.y, carPos.z + offset.z);
-        // Face same direction as car
-        this.mesh.quaternion.copy(carQuat);
-        this.mesh.visible = true;
-    }
-
-    public getYaw() { return this.yaw; }
+    public getYaw()          { return this.yaw; }
     public getWeapon(): Weapon { return this.weapon; }
 }
