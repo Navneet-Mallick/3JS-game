@@ -22,12 +22,21 @@ export class Input {
 
         // Use document.body as click target — always exists
         // Pointer lock will be requested on the canvas once it exists
-        document.addEventListener('click', () => {
-            if (this.isPointerLocked) return;
-            const canvas = document.querySelector('canvas');
-            const target = canvas ?? document.body;
-            target.requestPointerLock();
-        });
+document.addEventListener('click', () => {
+    if (this.isPointerLocked) return;
+    // Use document.body instead of canvas for pointer lock
+    document.body.requestPointerLock();
+});
+
+// ADD THIS — keyboard works without pointer lock
+document.addEventListener('keydown', (e) => {
+    // already handled above, but ensure canvas is focused
+    const canvas = document.querySelector('canvas');
+    if (canvas && document.activeElement !== canvas) {
+        canvas.setAttribute('tabindex', '0');
+        canvas.focus();
+    }
+});
 
         document.addEventListener('pointerlockchange', () => {
             this.isPointerLocked = !!document.pointerLockElement;

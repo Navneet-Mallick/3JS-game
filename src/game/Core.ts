@@ -414,11 +414,12 @@ export class Core {
         });
     }
 
-    private animate(time: number) {
-        requestAnimationFrame((t) => this.animate(t));
+     private animate(time: number) {
+    requestAnimationFrame((t) => this.animate(t));
 
-        if (this.paused) return;
+    if (this.paused) return;
 
+    try {
         GamepadInput.poll();
 
         const dt = Math.min(0.05, (time - this.lastTime) / 1000);
@@ -431,7 +432,6 @@ export class Core {
         this.vehicle.update(dt);
         this.traffic.forEach(t => t.update(dt));
         
-        // Update GTA-style systems
         const playerPos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
         this.pedestrians.forEach(p => p.update(dt, playerPos));
         this.police.forEach(p => p.update(dt, playerPos, this.playerInVehicle, this.wantedLevel.getCurrentLevel()));
@@ -448,17 +448,14 @@ export class Core {
         });
         this.wantedLevel.update(dt);
         
-        // Update save system
         this.saveSystem.updatePlayTime(dt);
         this.saveSystem.updateHighestWantedLevel(this.wantedLevel.getCurrentLevel());
         
-        // Handle interactions
         this.handleInteractions();
 
-        // Score — drift + air time
         if (this.playerInVehicle) {
             this.score.updateDrift(this.vehicle.lateralSpeed, dt);
-            const distance = this.vehicle.getSpeedKmh() * dt / 3.6; // km/h to m/s
+            const distance = this.vehicle.getSpeedKmh() * dt / 3.6;
             this.saveSystem.addDistanceTraveled(distance);
         } else {
             this.score.updateAir(false, dt);
@@ -470,7 +467,6 @@ export class Core {
         }
         this.score.updateMultiplier(dt);
 
-        // Update money display
         if (this.moneyEl) {
             const moneyValue = document.getElementById('money-value');
             if (moneyValue) {
@@ -478,19 +474,16 @@ export class Core {
             }
         }
 
-        // Mission update
         const pos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
         const reward = this.missions.update(dt, pos);
         if (reward > 0) this.score.add(reward, 'MISSION');
 
-        // Speedometer + gear
         if (this.playerInVehicle && this.speedoEl) {
             this.speedoEl.textContent = String(this.vehicle.getSpeedKmh());
             const gearEl = document.getElementById('gear-value');
             if (gearEl) gearEl.textContent = `G${this.vehicle.getGear()}`;
         }
 
-        // Near-vehicle prompt
         if (!this.playerInVehicle && this.enterPrompt) {
             const dist = this.vehicle.getPosition().distanceTo(this.player.getPosition());
             this.enterPrompt.style.display = dist < 6 ? 'flex' : 'none';
@@ -500,5 +493,8 @@ export class Core {
         this.scene.render();
         Input.clearPerFrameData();
         TouchControls.clearFrame();
+
+    } catch(err) {
+        console.error('GAME LOOP CRASH:', err); // ← will show exact crash location
     }
 }
