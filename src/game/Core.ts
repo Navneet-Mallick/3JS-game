@@ -152,39 +152,54 @@ export class Core {
     }
 
     // ── Enter / Exit ──────────────────────────────────────────────────────────
-    private handleEnterExit() {
-        const pressed = Input.isKeyPressed('f') ||
-            (GamepadInput.connected && GamepadInput.btnXPressed()) ||
-            TouchControls.enterPressed;
-        if (!pressed) return;
+   private handleEnterExit() {
+    const pressed = Input.isKeyPressed('f') ||
+        (GamepadInput.connected && GamepadInput.btnXPressed()) ||
+        TouchControls.enterPressed;
+    if (!pressed) return;
 
-        if (this.playerInVehicle) {
-            this.playerInVehicle = false;
-            this.player.setInVehicle(false);
-            this.vehicle.isOccupied = false;
-            this.vehicle.setVisible(true);
-            const vp = this.vehicle.getPosition();
-            this.player.setPosition(vp.x + 2.5, vp.y + 1, vp.z);
-            if (this.modeBadge) { this.modeBadge.textContent = 'ON FOOT'; this.modeBadge.style.color = '#00ff88'; }
-            this.sound.stopEngine();
-            if (this.speedoBox) this.speedoBox.classList.remove('active');
-        } else {
-            // Inline distance check — no distanceTo allocation
-            const pp = this.player.getPosition();
-            const vp = this.vehicle.getPosition();
-            _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
-            if (_dp.lengthSq() < 25) { // 5² = 25
-                this.playerInVehicle = true;
-                this.player.setInVehicle(true);
-                this.vehicle.isOccupied = true;
-                this.vehicle.setVisible(false);
-                if (this.modeBadge) { this.modeBadge.textContent = 'IN VEHICLE'; this.modeBadge.style.color = '#ffff00'; }
-                this.sound.startEngine();
-                if (this.speedoBox) this.speedoBox.classList.add('active');
+    if (this.playerInVehicle) {
+        // EXIT vehicle
+        this.playerInVehicle = false;
+        this.player.setInVehicle(false);
+        this.vehicle.isOccupied = false;
+        this.vehicle.setVisible(true);
+        this.player.mesh.visible = true;
+
+        const vp = this.vehicle.getPosition();
+        this.player.setPosition(vp.x + 2.5, vp.y + 1, vp.z);
+
+        if (this.modeBadge) {
+            this.modeBadge.textContent = 'ON FOOT';
+            this.modeBadge.style.color = '#00ff88';
+        }
+
+        this.sound.stopEngine();
+        if (this.speedoBox) this.speedoBox.classList.remove('active');
+
+    } else {
+        // ENTER vehicle
+        const pp = this.player.getPosition();
+        const vp = this.vehicle.getPosition();
+        _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
+
+        if (_dp.lengthSq() < 25) {
+            this.playerInVehicle = true;
+            this.player.setInVehicle(true);
+            this.vehicle.isOccupied = true;
+            this.vehicle.setVisible(true);   // keep car visible
+            this.player.mesh.visible = false; // hide player
+
+            if (this.modeBadge) {
+                this.modeBadge.textContent = 'IN VEHICLE';
+                this.modeBadge.style.color = '#ffff00';
             }
+
+            this.sound.startEngine();
+            if (this.speedoBox) this.speedoBox.classList.add('active');
         }
     }
-
+}
     // ── Pickups ───────────────────────────────────────────────────────────────
     private handlePickups(now: number) {
         const pos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
