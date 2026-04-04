@@ -184,12 +184,10 @@ export class Player {
         this.mesh.visible = true;
 
         // Mouse look
-        if (Input.isPointerLocked) {
-            this.yaw   -= Input.movementX * 0.0022;
-            this.pitch -= Input.movementY * 0.0022;
-            this.pitch  = Math.max(this.MIN_PITCH, Math.min(this.MAX_PITCH, this.pitch));
-        }
-
+       // Mouse look works with OR without pointer lock
+this.yaw -= Input.movementX * 0.0022;
+this.pitch -= Input.movementY * 0.0022;
+this.pitch = Math.max(this.MIN_PITCH, Math.min(this.MAX_PITCH, this.pitch));
         // Toggle first-person with V
         if (Input.isKeyPressed('v')) this.firstPerson = !this.firstPerson;
 
