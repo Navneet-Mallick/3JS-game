@@ -68,117 +68,128 @@ export class Player {
         this.camera.lookAt(0, 3 + 1.4, 0);
     }
 
-    private buildModel(): THREE.Group {
-        const g = new THREE.Group();
+   private buildModel(): THREE.Group {
+    const g = new THREE.Group();
 
-        // GTA-style character materials
-        const skin   = new THREE.MeshStandardMaterial({ color: 0xf4c2a1, roughness: 0.8 });
-        const hair   = new THREE.MeshStandardMaterial({ color: 0x2c1810, roughness: 0.9 });
-        const shirt  = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.7 });
-        const jeans  = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
-        const shoes  = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.6 });
-        const leather = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.7 });
+    // Materials
+    const skin     = new THREE.MeshStandardMaterial({ color: 0xd4956a, roughness: 0.8 });
+    const hair     = new THREE.MeshStandardMaterial({ color: 0x1a0a00, roughness: 0.9 });
+    const shirt    = new THREE.MeshStandardMaterial({ color: 0xcc2200, roughness: 0.7 }); // Red hawaiian
+    const stripes  = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 }); // White stripes
+    const pants    = new THREE.MeshStandardMaterial({ color: 0xf5f0e0, roughness: 0.8 }); // White pants
+    const shoes    = new THREE.MeshStandardMaterial({ color: 0x3d1c00, roughness: 0.7 }); // Brown shoes
+    const sole     = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
 
-        // Head (larger, more visible)
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.4), skin);
-        head.position.y = 1.8;
-        head.castShadow = true;
-        g.add(head);
+    // ── HEAD ──
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.42, 0.36), skin);
+    head.position.y = 1.78;
+    head.castShadow = true;
+    g.add(head);
 
-        // Hair
-        const hairMesh = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.15, 0.42), hair);
-        hairMesh.position.y = 2.1;
-        g.add(hairMesh);
+    // Hair (slicked back)
+    const hairTop = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.08, 0.34), hair);
+    hairTop.position.set(0, 2.02, -0.01);
+    g.add(hairTop);
 
-        // Torso (larger, more prominent)
-        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.3), shirt);
-        torso.position.y = 1.3;
-        torso.castShadow = true;
-        g.add(torso);
+    const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.22, 0.08), hair);
+    hairBack.position.set(0, 1.9, -0.19);
+    g.add(hairBack);
 
-        // Arms (longer, more visible)
-        this.leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), shirt);
-        this.leftArm.position.set(-0.4, 1.4, 0);
-        this.leftArm.castShadow = true;
-        g.add(this.leftArm);
+    // Face details - brow ridge
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.05, 0.06), hair);
+    brow.position.set(0, 1.84, 0.17);
+    g.add(brow);
 
-        this.rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), shirt);
-        this.rightArm.position.set(0.4, 1.4, 0);
-        this.rightArm.castShadow = true;
-        g.add(this.rightArm);
+    // Eyes
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.04), eyeMat);
+    leftEye.position.set(-0.1, 1.78, 0.18);
+    g.add(leftEye);
 
-        // Hands
-        const leftHand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), skin);
-        leftHand.position.set(-0.4, 0.9, 0);
-        g.add(leftHand);
+    const rightEye = leftEye.clone();
+    rightEye.position.set(0.1, 1.78, 0.18);
+    g.add(rightEye);
 
-        const rightHand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), skin);
-        rightHand.position.set(0.4, 0.9, 0);
-        g.add(rightHand);
+    // ── TORSO ── (hawaiian shirt)
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.72, 0.28), shirt);
+    torso.position.y = 1.22;
+    torso.castShadow = true;
+    g.add(torso);
 
-        // Legs (longer, more realistic)
-        this.leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.22), jeans);
-        this.leftLeg.position.set(-0.15, 0.4, 0);
-        this.leftLeg.castShadow = true;
-        g.add(this.leftLeg);
-
-        this.rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.22), jeans);
-        this.rightLeg.position.set(0.15, 0.4, 0);
-        this.rightLeg.castShadow = true;
-        g.add(this.rightLeg);
-
-        // Shoes (larger, more visible)
-        const leftShoe = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.15, 0.35), shoes);
-        leftShoe.position.set(-0.15, 0.05, 0.05);
-        g.add(leftShoe);
-
-        const rightShoe = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.15, 0.35), shoes);
-        rightShoe.position.set(0.15, 0.05, 0.05);
-        g.add(rightShoe);
-
-        // Add a distinctive jacket/vest
-        const vest = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.6, 0.25), leather);
-        vest.position.y = 1.4;
-        vest.castShadow = true;
-        g.add(vest);
-
-        // Add some detail - belt
-        const belt = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.05, 0.32), leather);
-        belt.position.y = 0.9;
-        g.add(belt);
-
-        // Make character more visible with emissive elements
-        const glowMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x00ff00, 
-            emissive: 0x00ff00, 
-            emissiveIntensity: 0.3 
-        });
-        
-        // Add glowing armband for visibility
-        const armband = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.2), glowMaterial);
-        armband.position.set(0.4, 1.2, 0);
-        g.add(armband);
-
-        // Add a glowing outline around the character
-        const outlineMaterial = new THREE.MeshBasicMaterial({ 
-            color: 0x00ff00, 
-            transparent: true, 
-            opacity: 0.3,
-            side: THREE.BackSide
-        });
-        
-        // Create outline meshes for main body parts
-        const headOutline = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.52, 0.42), outlineMaterial);
-        headOutline.position.copy(head.position);
-        g.add(headOutline);
-
-        const torsoOutline = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.82, 0.32), outlineMaterial);
-        torsoOutline.position.copy(torso.position);
-        g.add(torsoOutline);
-
-        return g;
+    // Hawaiian shirt white stripes
+    for (let i = 0; i < 3; i++) {
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.68, 0.30), stripes);
+        stripe.position.set(-0.18 + i * 0.18, 1.22, 0);
+        g.add(stripe);
     }
 
+    // Collar
+    const collar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 0.30), stripes);
+    collar.position.set(0, 1.55, 0);
+    g.add(collar);
+
+    // ── ARMS ──
+    this.leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.62, 0.16), shirt);
+    this.leftArm.position.set(-0.38, 1.28, 0);
+    this.leftArm.castShadow = true;
+    g.add(this.leftArm);
+
+    this.rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.62, 0.16), shirt);
+    this.rightArm.position.set(0.38, 1.28, 0);
+    this.rightArm.castShadow = true;
+    g.add(this.rightArm);
+
+    // Hands
+    const leftHand = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.14, 0.13), skin);
+    leftHand.position.set(-0.38, 0.92, 0);
+    g.add(leftHand);
+
+    const rightHand = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.14, 0.13), skin);
+    rightHand.position.set(0.38, 0.92, 0);
+    g.add(rightHand);
+
+    // ── BELT ──
+    const beltMat = new THREE.MeshStandardMaterial({ color: 0x1a0a00, roughness: 0.6, metalness: 0.3 });
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.07, 0.30), beltMat);
+    belt.position.y = 0.85;
+    g.add(belt);
+
+    // Belt buckle
+    const buckleMat = new THREE.MeshStandardMaterial({ color: 0xccaa00, metalness: 0.9, roughness: 0.1 });
+    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.06), buckleMat);
+    buckle.position.set(0, 0.85, 0.15);
+    g.add(buckle);
+
+    // ── LEGS (white pants) ──
+    this.leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.72, 0.20), pants);
+    this.leftLeg.position.set(-0.14, 0.44, 0);
+    this.leftLeg.castShadow = true;
+    g.add(this.leftLeg);
+
+    this.rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.72, 0.20), pants);
+    this.rightLeg.position.set(0.14, 0.44, 0);
+    this.rightLeg.castShadow = true;
+    g.add(this.rightLeg);
+
+    // ── SHOES ──
+    const leftShoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.32), shoes);
+    leftShoe.position.set(-0.14, 0.06, 0.05);
+    g.add(leftShoe);
+
+    const leftSole = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.04, 0.33), sole);
+    leftSole.position.set(-0.14, 0.01, 0.05);
+    g.add(leftSole);
+
+    const rightShoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.32), shoes);
+    rightShoe.position.set(0.14, 0.06, 0.05);
+    g.add(rightShoe);
+
+    const rightSole = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.04, 0.33), sole);
+    rightSole.position.set(0.14, 0.01, 0.05);
+    g.add(rightSole);
+
+    return g;
+}
     public update(dt: number) {
         if (!this.visible) { this.mesh.visible = false; return; }
         this.mesh.visible = true;
