@@ -12,9 +12,6 @@ export interface IVehicle {
     isOccupied: boolean;
     chassisMesh: THREE.Group;
     chassisBody: CANNON.Body;
-    applyDamage(damage: number, impactPoint?: THREE.Vector3, impactForce?: number): boolean;
-    getDamageLevel(): string;
-    getHealthPercent(): number;
 }
 
 export const VehicleType = {
