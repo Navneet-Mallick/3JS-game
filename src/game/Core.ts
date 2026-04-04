@@ -13,7 +13,6 @@ import { GamepadInput } from './Gamepad';
 import { TouchControls } from './TouchControls';
 import { Pedestrian }   from './Pedestrian';
 
-// Pre-allocated distance vector
 const _dp = new THREE.Vector3();
 
 export class Core {
@@ -31,7 +30,6 @@ export class Core {
     private playerInVehicle = false;
     private paused          = false;
 
-    // UI — cached once, never queried in the loop
     private modeBadge   = document.getElementById('mode-badge');
     private speedoEl    = document.getElementById('speedo-value');
     private gearEl      = document.getElementById('gear-value');
@@ -70,7 +68,6 @@ export class Core {
                 this.sound
             );
 
-            // Traffic — 6 cars, spread out so they don't collide at spawn
             const trafficSpawns: [number, number, number][] = [
                 [ 30, 0,  0], [-30, 0,  0],
                 [  0, 0, 30], [  0, 0, -30],
@@ -84,7 +81,6 @@ export class Core {
                 ));
             }
 
-            // Pedestrians — 6, no physics bodies
             const pedSpawns: [number, number, number][] = [
                 [10, 0, 10], [-10, 0, 10], [10, 0, -10], [-10, 0, -10],
                 [20, 0, 0],  [-20, 0, 0],
@@ -98,8 +94,6 @@ export class Core {
             }
 
             this.minimap = new Minimap('minimap-canvas');
-
-            // Wire cheat speed boost to vehicle
             this.player.onSpeedBoost = () => this.vehicle.boostSpeed();
 
             document.addEventListener('pointerlockchange', () => {
@@ -151,66 +145,62 @@ export class Core {
         requestAnimationFrame((t) => this.animate(t));
     }
 
-    // ── Enter / Exit ──────────────────────────────────────────────────────────
-   private handleEnterExit() {
-    const pressed = Input.isKeyPressed('f') ||
-        (GamepadInput.connected && GamepadInput.btnXPressed()) ||
-        TouchControls.enterPressed;
-    if (!pressed) return;
+    private handleEnterExit() {
+        const pressed = Input.isKeyPressed('f') ||
+            (GamepadInput.connected && GamepadInput.btnXPressed()) ||
+            TouchControls.enterPressed;
+        if (!pressed) return;
 
-    if (this.playerInVehicle) {
-        // EXIT vehicle
-        this.playerInVehicle = false;
-        this.player.setInVehicle(false);
-        this.vehicle.isOccupied = false;
-        this.vehicle.setVisible(true);
-        this.player.mesh.visible = true;
+        if (this.playerInVehicle) {
+            // EXIT vehicle
+            this.playerInVehicle = false;
+            this.player.setInVehicle(false);
+            this.vehicle.isOccupied = false;
+            this.vehicle.setVisible(true);
+            this.player.mesh.visible = true;
 
-        const vp = this.vehicle.getPosition();
-        this.player.setPosition(vp.x + 2.5, vp.y + 1, vp.z);
-
-        if (this.modeBadge) {
-            this.modeBadge.textContent = 'ON FOOT';
-            this.modeBadge.style.color = '#00ff88';
-        }
-
-        this.sound.stopEngine();
-        if (this.speedoBox) this.speedoBox.classList.remove('active');
-
-    } else {
-        // ENTER vehicle
-        const pp = this.player.getPosition();
-        const vp = this.vehicle.getPosition();
-        _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
-
-        if (_dp.lengthSq() < 25) {
-            this.playerInVehicle = true;
-            this.player.setInVehicle(true);
-            this.vehicle.isOccupied = true;
-            this.vehicle.setVisible(true);   // keep car visible
-            this.player.mesh.visible = false; // hide player
+            const vp = this.vehicle.getPosition();
+            this.player.setPosition(vp.x + 2.5, vp.y + 1, vp.z);
 
             if (this.modeBadge) {
-                this.modeBadge.textContent = 'IN VEHICLE';
-                this.modeBadge.style.color = '#ffff00';
+                this.modeBadge.textContent = 'ON FOOT';
+                this.modeBadge.style.color = '#00ff88';
             }
+            this.sound.stopEngine();
+            if (this.speedoBox) this.speedoBox.classList.remove('active');
 
-            this.sound.startEngine();
-            if (this.speedoBox) this.speedoBox.classList.add('active');
+        } else {
+            // ENTER vehicle — only if close enough
+            const pp = this.player.getPosition();
+            const vp = this.vehicle.getPosition();
+            _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
+
+            if (_dp.lengthSq() < 25) {
+                this.playerInVehicle = true;
+                this.player.setInVehicle(true);
+                this.player.mesh.visible = false; // hide Tommy
+                this.vehicle.isOccupied  = true;
+                this.vehicle.setVisible(true);    // keep car visible
+
+                if (this.modeBadge) {
+                    this.modeBadge.textContent = 'IN VEHICLE';
+                    this.modeBadge.style.color = '#ffff00';
+                }
+                this.sound.startEngine();
+                if (this.speedoBox) this.speedoBox.classList.add('active');
+            }
         }
     }
-}
-    // ── Pickups ───────────────────────────────────────────────────────────────
+
     private handlePickups(now: number) {
         const pos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
 
-        // Collectibles
         const cols = this.city.getCollectibles();
         for (let i = 0; i < cols.length; i++) {
             const c = cols[i];
             if (c.userData.collected) continue;
             _dp.set(pos.x - c.position.x, 0, pos.z - c.position.z);
-            if (_dp.lengthSq() < 9) { // 3²
+            if (_dp.lengthSq() < 9) {
                 c.userData.collected = true;
                 c.visible = false;
                 this.sound.playPickup();
@@ -220,13 +210,12 @@ export class Core {
             }
         }
 
-        // Power-ups
         const pups = this.city.getPowerUps();
         for (let i = 0; i < pups.length; i++) {
             const p = pups[i];
             if (p.userData.collected) continue;
             _dp.set(pos.x - p.position.x, 0, pos.z - p.position.z);
-            if (_dp.lengthSq() < 6.25) { // 2.5²
+            if (_dp.lengthSq() < 6.25) {
                 p.userData.collected = true;
                 p.visible = false;
                 this.sound.playPickup();
@@ -237,7 +226,6 @@ export class Core {
             }
         }
 
-        // Destructibles
         if (this.playerInVehicle) {
             const spd  = this.vehicle.getSpeedKmh();
             const dest = this.city.getDestructibles();
@@ -245,7 +233,7 @@ export class Core {
                 const d = dest[i];
                 if (!d.mesh.visible) continue;
                 _dp.set(pos.x - d.mesh.position.x, 0, pos.z - d.mesh.position.z);
-                if (_dp.lengthSq() < 16 && spd > 20) { // 4²
+                if (_dp.lengthSq() < 16 && spd > 20) {
                     d.health -= spd * 0.5;
                     if (d.health <= 0) {
                         d.mesh.visible = false;
@@ -257,11 +245,9 @@ export class Core {
         }
     }
 
-    // ── Main loop — hot path, minimal overhead ────────────────────────────────
     private animate(time: number) {
         requestAnimationFrame((t) => this.animate(t));
 
-        // F key works even when paused
         this.handleEnterExit();
 
         if (this.paused) {
@@ -272,17 +258,18 @@ export class Core {
         GamepadInput.poll();
 
         const dt  = Math.min(0.05, (time - this.lastTime) / 1000);
-        const now = time; // single timestamp for the whole frame
+        const now = time;
         this.lastTime = time;
 
-        // Physics step
         this.physics.update(dt);
 
-        // Player + vehicle
-        this.player.update(dt);
+        // ── KEY FIX: only update player when on foot ──
+        if (!this.playerInVehicle) {
+            this.player.update(dt);
+        }
         this.vehicle.update(dt);
 
-        // Keep Tommy visibly seated in car while driving
+        // Seat Tommy visibly inside car while driving
         if (this.playerInVehicle) {
             this.player.seatInVehicle(
                 this.vehicle.chassisMesh.position,
@@ -290,12 +277,10 @@ export class Core {
             );
         }
 
-        // Reference position for LOD
         const playerPos = this.playerInVehicle
             ? this.vehicle.getPosition()
             : this.player.getPosition();
 
-        // Traffic LOD — update only if within 130 units
         for (let i = 0; i < this.traffic.length; i++) {
             const t = this.traffic[i];
             _dp.set(
@@ -303,10 +288,9 @@ export class Core {
                 0,
                 t.getPosition().z - playerPos.z
             );
-            if (_dp.lengthSq() < 16900) t.update(dt); // 130²
+            if (_dp.lengthSq() < 16900) t.update(dt);
         }
 
-        // Pedestrian LOD — update + show only within 60 units
         for (let i = 0; i < this.pedestrians.length; i++) {
             const p = this.pedestrians[i];
             _dp.set(
@@ -314,15 +298,13 @@ export class Core {
                 0,
                 p.getPosition().z - playerPos.z
             );
-            const near = _dp.lengthSq() < 3600; // 60²
+            const near = _dp.lengthSq() < 3600;
             p.mesh.visible = near;
             if (near) p.update(dt, playerPos);
         }
 
-        // Pickups
         this.handlePickups(now);
 
-        // UI — only update what's needed
         if (this.playerInVehicle) {
             if (this.speedoEl) this.speedoEl.textContent = String(this.vehicle.getSpeedKmh());
             if (this.gearEl)   this.gearEl.textContent   = `G${this.vehicle.getGear()}`;
@@ -333,7 +315,7 @@ export class Core {
                 const pp = this.player.getPosition();
                 const vp = this.vehicle.getPosition();
                 _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
-                this.enterPrompt.style.display = _dp.lengthSq() < 36 ? 'flex' : 'none'; // 6²
+                this.enterPrompt.style.display = _dp.lengthSq() < 36 ? 'flex' : 'none';
             } else {
                 this.enterPrompt.style.display = 'none';
             }
