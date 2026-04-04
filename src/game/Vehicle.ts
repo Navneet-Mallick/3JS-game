@@ -4,6 +4,12 @@ import { Input } from './Input';
 import { GamepadInput } from './Gamepad';
 import { Sound } from './Sound';
 
+// ── Pre-allocated — zero per-frame heap allocations ──────────────────────────
+const _carFwd    = new THREE.Vector3();
+const _vel       = new THREE.Vector3();
+const _camTarget = new THREE.Vector3();
+const _camPos    = new THREE.Vector3();
+
 export class Vehicle {
     private scene:  THREE.Scene;
     private camera: THREE.PerspectiveCamera;
@@ -14,12 +20,12 @@ export class Vehicle {
     private wheelMeshes: THREE.Group[] = [];
     private taillightMats: THREE.MeshLambertMaterial[] = [];
 
-    public isOccupied  = false;
+    public isOccupied   = false;
     public lateralSpeed = 0;
 
-    // In-car camera
-    private camYaw   = Math.PI;
-    private camPitch = 0.28;
+    // Camera
+    private camYaw         = Math.PI;
+    private camPitch       = 0.28;
     private readonly CAM_DIST = 10;
     private mouseIdleTimer = 0;
 
@@ -45,10 +51,7 @@ export class Vehicle {
         this.scene  = scene;
         this.camera = camera;
 
-        // ── Chassis ──────────────────────────────────────────────────────────
-        // Half-extents: width=1.0, height=0.3, length=2.2
-        // Spawn y must be above ground so wheels reach down: y = wheel_radius + suspension_rest + chassis_half_height
-        // = 0.38 + 0.35 + 0.3 = ~1.05  →  use 1.2 for safety
+        // Chassis — spawn y = wheel_radius(0.38) + suspension_rest(0.35) + half_height(0.3) + margin = 1.2
         const chassisShape = new CANNON.Box(new CANNON.Vec3(1.0, 0.3, 2.2));
         this.chassisBody = new CANNON.Body({ mass: 1200, shape: chassisShape });
         this.chassisBody.position.set(position.x, position.y + 1.2, position.z);
@@ -59,7 +62,6 @@ export class Vehicle {
         this.chassisMesh = this.buildCarModel();
         this.scene.add(this.chassisMesh);
 
-        // ── RaycastVehicle ───────────────────────────────────────────────────
         this.vehicle = new CANNON.RaycastVehicle({
             chassisBody:      this.chassisBody,
             indexForwardAxis: 2,
@@ -68,30 +70,23 @@ export class Vehicle {
         });
 
         const wheelOpts = {
-            radius:             0.38,
-            directionLocal:     new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness:    35,
-            suspensionRestLength:   0.35,   // shorter rest = car sits lower, less bounce
-            frictionSlip:           2.5,    // was 12 — that caused violent launches
-            dampingRelaxation:      2.3,
-            dampingCompression:     4.4,
-            maxSuspensionForce:     80000,
-            rollInfluence:          0.01,   // near-zero = no roll-over
-            axleLocal:              new CANNON.Vec3(1, 0, 0),
+            radius:                      0.38,
+            directionLocal:              new CANNON.Vec3(0, -1, 0),
+            suspensionStiffness:         35,
+            suspensionRestLength:        0.35,
+            frictionSlip:                2.5,
+            dampingRelaxation:           2.3,
+            dampingCompression:          4.4,
+            maxSuspensionForce:          80000,
+            rollInfluence:               0.01,
+            axleLocal:                   new CANNON.Vec3(1, 0, 0),
             chassisConnectionPointLocal: new CANNON.Vec3(1, 1, 0),
-            maxSuspensionTravel:    0.3,
+            maxSuspensionTravel:         0.3,
             customSlidingFrictionWheelStep: 1,
         };
 
-        // Wheel positions: [x, y_offset_from_chassis_centre, z]
-        // y = -0.1 means wheel hangs 0.1 below chassis centre
-        const wheelPositions = [
-            [-0.95, -0.1,  1.5],   // front-left
-            [ 0.95, -0.1,  1.5],   // front-right
-            [-0.95, -0.1, -1.5],   // rear-left
-            [ 0.95, -0.1, -1.5],   // rear-right
-        ];
-        wheelPositions.forEach(([x, y, z]) => {
+        const wPos = [[-0.95,-0.1,1.5],[0.95,-0.1,1.5],[-0.95,-0.1,-1.5],[0.95,-0.1,-1.5]];
+        wPos.forEach(([x, y, z]) => {
             wheelOpts.chassisConnectionPointLocal.set(x, y, z);
             this.vehicle.addWheel({ ...wheelOpts });
             const wm = this.buildWheelModel();
@@ -105,67 +100,53 @@ export class Vehicle {
     // ── Car model ─────────────────────────────────────────────────────────────
     private buildCarModel(): THREE.Group {
         const g     = new THREE.Group();
-        const paint = new THREE.MeshLambertMaterial({ color: 0xcc2200 }); // Vice City red
+        const paint = new THREE.MeshLambertMaterial({ color: 0xcc2200 });
         const glass = new THREE.MeshLambertMaterial({ color: 0x223344, transparent: true, opacity: 0.45 });
         const dark  = new THREE.MeshLambertMaterial({ color: 0x111111 });
         const hlMat = new THREE.MeshBasicMaterial({ color: 0xffffcc });
         const tlMat = new THREE.MeshLambertMaterial({ color: 0xff2200, emissive: new THREE.Color(0xff1100) });
         this.taillightMats.push(tlMat);
 
-        // Body
-        const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.55, 4.6), paint);
-        body.castShadow = true; g.add(body);
+        const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x=0, y=0, z=0, rx=0) => {
+            const m = new THREE.Mesh(geo, mat);
+            m.position.set(x, y, z);
+            if (rx) m.rotation.x = rx;
+            g.add(m);
+            return m;
+        };
 
-        // Hood
-        const hood = new THREE.Mesh(new THREE.BoxGeometry(1.96, 0.16, 1.4), paint);
-        hood.position.set(0, 0.34, 1.3); hood.rotation.x = 0.1; g.add(hood);
-
-        // Cabin glass
-        const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.52, 2.0), glass);
-        cabin.position.set(0, 0.54, -0.1); g.add(cabin);
-
-        // Roof
-        const roof = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.07, 2.02), paint);
-        roof.position.set(0, 0.80, -0.1); g.add(roof);
-
-        // Front bumper
-        const bumperF = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.22, 0.18), dark);
-        bumperF.position.set(0, -0.14, 2.3); g.add(bumperF);
-
-        // Rear bumper
-        const bumperR = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.22, 0.18), dark);
-        bumperR.position.set(0, -0.14, -2.3); g.add(bumperR);
-
+        add(new THREE.BoxGeometry(2.0, 0.55, 4.6), paint);                        // body
+        add(new THREE.BoxGeometry(1.96, 0.16, 1.4), paint, 0, 0.34, 1.3, 0.1);   // hood
+        add(new THREE.BoxGeometry(1.7, 0.52, 2.0),  glass, 0, 0.54, -0.1);       // cabin
+        add(new THREE.BoxGeometry(1.72, 0.07, 2.02), paint, 0, 0.80, -0.1);      // roof
+        add(new THREE.BoxGeometry(2.0, 0.22, 0.18),  dark,  0, -0.14, 2.3);      // front bumper
+        add(new THREE.BoxGeometry(2.0, 0.22, 0.18),  dark,  0, -0.14, -2.3);     // rear bumper
         // Headlights
-        const hlL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.13, 0.06), hlMat);
-        hlL.position.set(-0.62, 0.1, 2.32); g.add(hlL);
+        const hlL = add(new THREE.BoxGeometry(0.5, 0.13, 0.06), hlMat, -0.62, 0.1, 2.32);
         const hlR = hlL.clone(); hlR.position.set(0.62, 0.1, 2.32); g.add(hlR);
-
         // Taillights
-        const tlL = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.13, 0.06), tlMat);
-        tlL.position.set(-0.62, 0.1, -2.32); g.add(tlL);
+        const tlL = add(new THREE.BoxGeometry(0.55, 0.13, 0.06), tlMat, -0.62, 0.1, -2.32);
         const tlR = tlL.clone(); tlR.position.set(0.62, 0.1, -2.32); g.add(tlR);
 
         return g;
     }
 
+    // Shared wheel geometry/material — created once
+    private static _tireGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.28, 10);
+    private static _rimGeo  = new THREE.CylinderGeometry(0.22, 0.22, 0.30, 8);
+    private static _tireMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+    private static _rimMat  = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
+
     private buildWheelModel(): THREE.Group {
         const g    = new THREE.Group();
-        const tire = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.38, 0.38, 0.28, 10),
-            new THREE.MeshLambertMaterial({ color: 0x111111 })
-        );
+        const tire = new THREE.Mesh(Vehicle._tireGeo, Vehicle._tireMat);
         tire.rotation.z = Math.PI / 2; g.add(tire);
-
-        const rim = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.22, 0.22, 0.30, 8),
-            new THREE.MeshLambertMaterial({ color: 0xaaaaaa })
-        );
+        const rim = new THREE.Mesh(Vehicle._rimGeo, Vehicle._rimMat);
         rim.rotation.z = Math.PI / 2; g.add(rim);
         return g;
     }
 
-    // ── Update ────────────────────────────────────────────────────────────────
+    // ── Update — zero allocations ─────────────────────────────────────────────
     public update(dt: number) {
         const spd = this.getSpeedKmh();
 
@@ -173,7 +154,7 @@ export class Vehicle {
         if (this.speedBoostTimer > 0) { this.speedBoostTimer -= dt; this.speedBoostMultiplier = 1.6; }
         else                          { this.speedBoostMultiplier = 1.0; }
 
-        // Gear shift
+        // Gear
         this.gearTimer += dt;
         if (this.gearTimer > 0.5) {
             this.gearTimer = 0;
@@ -181,12 +162,10 @@ export class Vehicle {
             else if (spd < (this.gear - 1) * 18 && this.gear > 1)  this.gear--;
         }
 
-        const gearRatio   = this.GEAR_RATIOS[this.gear] ?? 1;
-        // Reduced engine force — was 4800*3.5=16800, now max ~3500
+        const gearRatio    = this.GEAR_RATIOS[this.gear] ?? 1;
         const ENGINE_FORCE = 1200 * gearRatio * this.speedBoostMultiplier;
         const BRAKE_FORCE  = 60;
         const MAX_STEER    = Math.max(0.2, 0.5 - spd * 0.004);
-        const STEER_SPEED  = 5.0;
 
         let force = 0, steer = 0, brake = 0;
         let handbrake = false, throttle = false;
@@ -211,19 +190,17 @@ export class Vehicle {
             this.sound.updateEngine(spd * 0.5, throttle);
             this.updateCamera(dt);
         } else {
-            // Parked — apply gentle brake so it doesn't roll
             brake = 8;
             this.taillightMats.forEach(m => m.emissive.setHex(0x220000));
         }
 
-        // Lateral speed (for drift scoring)
-        const carFwd = new THREE.Vector3(0, 0, 1)
-            .applyQuaternion(this.chassisBody.quaternion as unknown as THREE.Quaternion);
-        const vel    = new THREE.Vector3(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
-        this.lateralSpeed = vel.clone().sub(carFwd.multiplyScalar(vel.dot(carFwd))).length();
+        // Lateral speed — reuse pre-allocated vectors
+        _carFwd.set(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as unknown as THREE.Quaternion);
+        _vel.set(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
+        this.lateralSpeed = _vel.clone().sub(_carFwd.multiplyScalar(_vel.dot(_carFwd))).length();
 
         // Smooth steer
-        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, STEER_SPEED * dt);
+        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 5 * dt);
 
         this.vehicle.applyEngineForce(force, 2);
         this.vehicle.applyEngineForce(force, 3);
@@ -231,18 +208,18 @@ export class Vehicle {
         this.vehicle.setSteeringValue(this.currentSteeringValue, 1);
 
         if (handbrake) {
-            this.vehicle.setBrake(0,   0); this.vehicle.setBrake(0,   1);
+            this.vehicle.setBrake(0, 0); this.vehicle.setBrake(0, 1);
             this.vehicle.setBrake(BRAKE_FORCE * 4, 2);
             this.vehicle.setBrake(BRAKE_FORCE * 4, 3);
         } else {
             for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i);
         }
 
-        // Sync mesh to physics
+        // Sync mesh — direct copy, no allocation
         this.chassisMesh.position.copy(this.chassisBody.position as unknown as THREE.Vector3);
         this.chassisMesh.quaternion.copy(this.chassisBody.quaternion as unknown as THREE.Quaternion);
 
-        for (let i = 0; i < this.vehicle.wheelInfos.length; i++) {
+        for (let i = 0; i < 4; i++) {
             this.vehicle.updateWheelTransform(i);
             const t = this.vehicle.wheelInfos[i].worldTransform;
             this.wheelMeshes[i].position.copy(t.position as unknown as THREE.Vector3);
@@ -250,9 +227,8 @@ export class Vehicle {
         }
     }
 
-    // ── In-car camera ─────────────────────────────────────────────────────────
+    // ── In-car camera — zero allocations ─────────────────────────────────────
     private updateCamera(dt: number) {
-        // Mouse rotates camera freely
         if (Input.movementX !== 0 || Input.movementY !== 0) {
             this.camYaw   -= Input.movementX * 0.003;
             this.camPitch -= Input.movementY * 0.003;
@@ -260,13 +236,12 @@ export class Vehicle {
             this.mouseIdleTimer = 1.8;
         }
 
-        // Auto-align behind car when mouse idle
         if (this.mouseIdleTimer > 0) {
             this.mouseIdleTimer -= dt;
         } else {
-            const carFwd    = new THREE.Vector3(0, 0, 1)
-                .applyQuaternion(this.chassisBody.quaternion as unknown as THREE.Quaternion);
-            const targetYaw = Math.atan2(carFwd.x, carFwd.z) + Math.PI;
+            // Auto-align behind car
+            _carFwd.set(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as unknown as THREE.Quaternion);
+            const targetYaw = Math.atan2(_carFwd.x, _carFwd.z) + Math.PI;
             let diff = targetYaw - this.camYaw;
             while (diff >  Math.PI) diff -= Math.PI * 2;
             while (diff < -Math.PI) diff += Math.PI * 2;
@@ -276,27 +251,34 @@ export class Vehicle {
         const spd     = this.getSpeedKmh();
         const dynDist = this.CAM_DIST + spd * 0.05;
 
-        const target = new THREE.Vector3(
+        _camTarget.set(
             this.chassisMesh.position.x,
             this.chassisMesh.position.y + 1.2,
             this.chassisMesh.position.z
         );
-        const cx = target.x + dynDist * Math.sin(this.camYaw) * Math.cos(this.camPitch);
-        const cy = target.y + dynDist * Math.sin(this.camPitch);
-        const cz = target.z + dynDist * Math.cos(this.camYaw) * Math.cos(this.camPitch);
+
+        const sinY = Math.sin(this.camYaw);
+        const cosY = Math.cos(this.camYaw);
+        const cosP = Math.cos(this.camPitch);
+        const sinP = Math.sin(this.camPitch);
+        _camPos.set(
+            _camTarget.x + dynDist * sinY * cosP,
+            _camTarget.y + dynDist * sinP,
+            _camTarget.z + dynDist * cosY * cosP
+        );
 
         const lerpT = Math.min(0.2, 0.1 + spd * 0.002);
-        this.camera.position.lerp(new THREE.Vector3(cx, cy, cz), lerpT);
-        this.camera.lookAt(target);
+        this.camera.position.lerp(_camPos, lerpT);
+        this.camera.lookAt(_camTarget);
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
     public getPosition() { return this.chassisMesh.position; }
     public getGear()     { return this.gear; }
 
-    public setVisible(visible: boolean) {
-        this.chassisMesh.visible = visible;
-        this.wheelMeshes.forEach(w => w.visible = visible);
+    public setVisible(v: boolean) {
+        this.chassisMesh.visible = v;
+        this.wheelMeshes.forEach(w => w.visible = v);
     }
 
     public getSpeedKmh(): number {

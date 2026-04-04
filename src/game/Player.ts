@@ -3,13 +3,25 @@ import * as CANNON from 'cannon-es';
 import { Input } from './Input';
 import { Weapon } from './Weapon';
 
+// ── Pre-allocated reusables — zero per-frame heap allocations ────────────────
+const _fwdVec    = new THREE.Vector3();
+const _rightVec  = new THREE.Vector3();
+const _dir       = new THREE.Vector3();
+const _camTarget = new THREE.Vector3();
+const _camPos    = new THREE.Vector3();
+const _lookDir   = new THREE.Vector3();
+const _headPos   = new THREE.Vector3();
+const _weaponPos = new THREE.Vector3();
+const _weaponQ   = new THREE.Quaternion();
+const _euler     = new THREE.Euler();
+
 export class Player {
     private scene:  THREE.Scene;
     public  body:   CANNON.Body;
     private camera: THREE.PerspectiveCamera;
 
-    public mesh:    THREE.Group;
-    public visible  = true;
+    public mesh:   THREE.Group;
+    public visible = true;
 
     private moveSpeed   = 6;
     private sprintSpeed = 11;
@@ -24,12 +36,12 @@ export class Player {
     private animTime   = 0;
     private bobTime    = 0;
 
-    // Camera orbit — GTA VC style: high angle, see Tommy clearly
+    // Camera — GTA VC style
     private yaw   = 0;
-    private pitch = 0.38;                // ~22° above horizon — you see Tommy's full body
+    private pitch = 0.38;
     private readonly ORBIT_DIST = 8;
-    private readonly MIN_PITCH  = 0.1;   // never go below horizon
-    private readonly MAX_PITCH  = 0.7;   // max top-down
+    private readonly MIN_PITCH  = 0.1;
+    private readonly MAX_PITCH  = 0.7;
     private firstPerson = false;
 
     private weapon: Weapon;
@@ -52,7 +64,7 @@ export class Player {
             shape:          new CANNON.Sphere(0.5),
             position:       new CANNON.Vec3(0, 2, 0),
             fixedRotation:  true,
-            linearDamping:  0.9,
+            linearDamping:  0.92,
             angularDamping: 1.0,
             material:       playerMaterial,
         });
@@ -65,7 +77,6 @@ export class Player {
             this.groundTimer = 0.15;
         });
 
-        // Start camera behind Tommy
         this.camera.position.set(0, 5, this.ORBIT_DIST);
         this.camera.lookAt(0, 1, 0);
     }
@@ -74,112 +85,92 @@ export class Player {
     private buildModel(): THREE.Group {
         const g = new THREE.Group();
 
-        const skin   = new THREE.MeshLambertMaterial({ color: 0xc8845a });
-        const hair   = new THREE.MeshLambertMaterial({ color: 0x0d0800 });
-        const suit   = new THREE.MeshLambertMaterial({ color: 0xf0ede0 }); // cream-white jacket
-        const shirt  = new THREE.MeshLambertMaterial({ color: 0x111111 }); // black shirt
-        const pants  = new THREE.MeshLambertMaterial({ color: 0xe8e4d0 }); // white trousers
-        const shoes  = new THREE.MeshLambertMaterial({ color: 0x1a0f00 });
-        const eyeM   = new THREE.MeshLambertMaterial({ color: 0x050505 });
+        // Shared materials — created once, reused across meshes
+        const skin  = new THREE.MeshLambertMaterial({ color: 0xc8845a });
+        const hair  = new THREE.MeshLambertMaterial({ color: 0x0d0800 });
+        const suit  = new THREE.MeshLambertMaterial({ color: 0xf0ede0 });
+        const shirt = new THREE.MeshLambertMaterial({ color: 0x111111 });
+        const pants = new THREE.MeshLambertMaterial({ color: 0xe8e4d0 });
+        const shoes = new THREE.MeshLambertMaterial({ color: 0x1a0f00 });
+        const eyeM  = new THREE.MeshLambertMaterial({ color: 0x050505 });
+        const belt  = new THREE.MeshLambertMaterial({ color: 0x111111 });
 
-        // Head
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.40, 0.34), skin);
-        head.position.y = 1.76; head.castShadow = true; g.add(head);
+        const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x=0, y=0, z=0, shadow=false) => {
+            const m = new THREE.Mesh(geo, mat);
+            m.position.set(x, y, z);
+            if (shadow) m.castShadow = true;
+            g.add(m);
+            return m;
+        };
 
-        // Hair — slicked back
-        const hairTop = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.06, 0.30), hair);
-        hairTop.position.set(0, 1.99, -0.02); g.add(hairTop);
-        const hairL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.28, 0.30), hair);
-        hairL.position.set(-0.18, 1.88, -0.02); g.add(hairL);
-        const hairR = hairL.clone(); hairR.position.set(0.18, 1.88, -0.02); g.add(hairR);
-        const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.30, 0.06), hair);
-        hairBack.position.set(0, 1.88, -0.18); g.add(hairBack);
-
+        // Head + hair
+        add(new THREE.BoxGeometry(0.36, 0.40, 0.34), skin, 0, 1.76, 0, true);
+        add(new THREE.BoxGeometry(0.36, 0.06, 0.30), hair, 0, 1.99, -0.02);
+        add(new THREE.BoxGeometry(0.04, 0.28, 0.30), hair, -0.18, 1.88, -0.02);
+        add(new THREE.BoxGeometry(0.04, 0.28, 0.30), hair,  0.18, 1.88, -0.02);
+        add(new THREE.BoxGeometry(0.34, 0.30, 0.06), hair, 0, 1.88, -0.18);
         // Eyes
-        const lEye = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.03), eyeM);
-        lEye.position.set(-0.09, 1.76, 0.17); g.add(lEye);
-        const rEye = lEye.clone(); rEye.position.set(0.09, 1.76, 0.17); g.add(rEye);
-
-        // Black shirt collar
-        const collar = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.20, 0.26), shirt);
-        collar.position.set(0, 1.50, 0); g.add(collar);
-
-        // Suit jacket
-        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.70, 0.28), suit);
-        torso.position.y = 1.18; torso.castShadow = true; g.add(torso);
-
-        // Lapels
-        const lapelL = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.28, 0.30), shirt);
-        lapelL.position.set(-0.10, 1.38, 0.01); g.add(lapelL);
-        const lapelR = lapelL.clone(); lapelR.position.set(0.10, 1.38, 0.01); g.add(lapelR);
-
+        add(new THREE.BoxGeometry(0.07, 0.05, 0.03), eyeM, -0.09, 1.76, 0.17);
+        add(new THREE.BoxGeometry(0.07, 0.05, 0.03), eyeM,  0.09, 1.76, 0.17);
+        // Collar + torso
+        add(new THREE.BoxGeometry(0.44, 0.20, 0.26), shirt, 0, 1.50, 0);
+        add(new THREE.BoxGeometry(0.58, 0.70, 0.28), suit,  0, 1.18, 0, true);
+        add(new THREE.BoxGeometry(0.10, 0.28, 0.30), shirt, -0.10, 1.38, 0.01);
+        add(new THREE.BoxGeometry(0.10, 0.28, 0.30), shirt,  0.10, 1.38, 0.01);
         // Arms
-        this.leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.60, 0.16), suit);
-        this.leftArm.position.set(-0.38, 1.24, 0); this.leftArm.castShadow = true; g.add(this.leftArm);
-        this.rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.60, 0.16), suit);
-        this.rightArm.position.set(0.38, 1.24, 0); this.rightArm.castShadow = true; g.add(this.rightArm);
-
+        this.leftArm  = add(new THREE.BoxGeometry(0.16, 0.60, 0.16), suit, -0.38, 1.24, 0, true);
+        this.rightArm = add(new THREE.BoxGeometry(0.16, 0.60, 0.16), suit,  0.38, 1.24, 0, true);
         // Hands
-        const lHand = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.13), skin);
-        lHand.position.set(-0.38, 0.90, 0); g.add(lHand);
-        const rHand = lHand.clone(); rHand.position.set(0.38, 0.90, 0); g.add(rHand);
-
+        add(new THREE.BoxGeometry(0.13, 0.13, 0.13), skin, -0.38, 0.90, 0);
+        add(new THREE.BoxGeometry(0.13, 0.13, 0.13), skin,  0.38, 0.90, 0);
         // Belt
-        const belt = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.06, 0.29),
-            new THREE.MeshLambertMaterial({ color: 0x111111 }));
-        belt.position.y = 0.83; g.add(belt);
-
+        add(new THREE.BoxGeometry(0.58, 0.06, 0.29), belt, 0, 0.83, 0);
         // Legs
-        this.leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.70, 0.20), pants);
-        this.leftLeg.position.set(-0.14, 0.43, 0); this.leftLeg.castShadow = true; g.add(this.leftLeg);
-        this.rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.70, 0.20), pants);
-        this.rightLeg.position.set(0.14, 0.43, 0); this.rightLeg.castShadow = true; g.add(this.rightLeg);
-
+        this.leftLeg  = add(new THREE.BoxGeometry(0.20, 0.70, 0.20), pants, -0.14, 0.43, 0, true);
+        this.rightLeg = add(new THREE.BoxGeometry(0.20, 0.70, 0.20), pants,  0.14, 0.43, 0, true);
         // Shoes
-        const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.09, 0.30), shoes);
-        lShoe.position.set(-0.14, 0.06, 0.04); g.add(lShoe);
-        const rShoe = lShoe.clone(); rShoe.position.set(0.14, 0.06, 0.04); g.add(rShoe);
+        add(new THREE.BoxGeometry(0.22, 0.09, 0.30), shoes, -0.14, 0.06, 0.04);
+        add(new THREE.BoxGeometry(0.22, 0.09, 0.30), shoes,  0.14, 0.06, 0.04);
 
         return g;
     }
 
-    // ── Update ────────────────────────────────────────────────────────────────
+    // ── Update — zero allocations ─────────────────────────────────────────────
     public update(dt: number) {
         if (!this.visible) { this.mesh.visible = false; return; }
         this.mesh.visible = true;
 
-        // Mouse look — works with OR without pointer lock
+        // Mouse look
         this.yaw   -= Input.movementX * 0.0025;
         this.pitch -= Input.movementY * 0.0025;
         this.pitch  = Math.max(this.MIN_PITCH, Math.min(this.MAX_PITCH, this.pitch));
 
         if (Input.isKeyPressed('v')) this.firstPerson = !this.firstPerson;
 
-        // Movement — WASD + arrow keys
-        const goRight = (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) ? 1 : 0;
-        const goLeft  = (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  ? 1 : 0;
-        const goBack  = (Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  ? 1 : 0;
-        const goFwd   = (Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    ? 1 : 0;
-        const ix = goRight - goLeft;
-        const iz = goBack  - goFwd;
+        // Input
+        const ix = ((Input.isKeyDown('d') || Input.isKeyDown('arrowright')) ? 1 : 0)
+                 - ((Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  ? 1 : 0);
+        const iz = ((Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  ? 1 : 0)
+                 - ((Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    ? 1 : 0);
         const sprinting = Input.isKeyDown('shift');
 
-        // Direction relative to camera yaw
-        const fwdVec   = new THREE.Vector3( Math.sin(this.yaw), 0,  Math.cos(this.yaw));
-        const rightVec = new THREE.Vector3( Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-        const dir = new THREE.Vector3()
-            .addScaledVector(fwdVec,   iz)
-            .addScaledVector(rightVec, ix);
-        const moving = dir.lengthSq() > 0;
+        // Direction — reuse pre-allocated vectors
+        _fwdVec.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+        _rightVec.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+        _dir.set(0, 0, 0)
+            .addScaledVector(_fwdVec,   iz)
+            .addScaledVector(_rightVec, ix);
+
+        const moving = _dir.lengthSq() > 0;
         const speed  = sprinting ? this.sprintSpeed : this.moveSpeed;
 
         if (moving) {
-            dir.normalize();
-            this.body.velocity.x = dir.x * speed;
-            this.body.velocity.z = dir.z * speed;
+            _dir.normalize();
+            this.body.velocity.x = _dir.x * speed;
+            this.body.velocity.z = _dir.z * speed;
 
-            // Rotate Tommy to face movement direction
-            const targetY = Math.atan2(dir.x, dir.z);
+            // Smooth rotation toward movement direction
+            const targetY = Math.atan2(_dir.x, _dir.z);
             let diff = targetY - this.mesh.rotation.y;
             while (diff >  Math.PI) diff -= Math.PI * 2;
             while (diff < -Math.PI) diff += Math.PI * 2;
@@ -189,7 +180,7 @@ export class Player {
             this.body.velocity.z *= 0.7;
         }
 
-        // Ground clamp — keep player on surface
+        // Ground clamp
         if (this.body.position.y < 1.5) {
             this.body.position.y = 1.5;
             this.body.velocity.y = 0;
@@ -208,24 +199,20 @@ export class Player {
             if (this.groundTimer <= 0) this.onGround = false;
         }
 
-        // Sync mesh to physics (offset so feet sit on ground)
+        // Sync mesh
         this.mesh.position.set(
             this.body.position.x,
             this.body.position.y - 1.0,
             this.body.position.z
         );
 
-        // Weapon
-        const camOrigin = new THREE.Vector3(
-            this.body.position.x,
-            this.body.position.y + 0.3,
-            this.body.position.z
-        );
-        const camQuat = new THREE.Quaternion()
-            .setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0));
-        this.weapon.updatePosition(camOrigin, camQuat);
+        // Weapon — reuse vectors
+        _weaponPos.set(this.body.position.x, this.body.position.y + 0.3, this.body.position.z);
+        _euler.set(this.pitch, this.yaw, 0);
+        _weaponQ.setFromEuler(_euler);
+        this.weapon.updatePosition(_weaponPos, _weaponQ);
         this.weapon.setVisible(!this.playerInVehicle);
-        this.weapon.update(dt, camOrigin, camQuat);
+        this.weapon.update(dt, _weaponPos, _weaponQ);
 
         // Walk animation
         if (moving) {
@@ -248,43 +235,52 @@ export class Player {
         this.updateCamera(moving, sprinting);
     }
 
-    // ── Camera — GTA VC style ─────────────────────────────────────────────────
+    // ── Camera — zero allocations ─────────────────────────────────────────────
     private updateCamera(moving: boolean, sprinting: boolean) {
         const bob = moving ? Math.sin(this.bobTime * 0.5) * (sprinting ? 0.04 : 0.02) : 0;
 
         if (this.firstPerson) {
-            const headPos = new THREE.Vector3(
+            _headPos.set(
                 this.mesh.position.x,
                 this.mesh.position.y + 1.72,
                 this.mesh.position.z
             );
-            this.camera.position.copy(headPos);
-            this.camera.lookAt(headPos.clone().add(new THREE.Vector3(
+            this.camera.position.copy(_headPos);
+            _lookDir.set(
                 Math.sin(this.yaw) * Math.cos(this.pitch),
                 Math.sin(-this.pitch),
                 Math.cos(this.yaw) * Math.cos(this.pitch)
-            )));
+            );
+            _headPos.add(_lookDir);
+            this.camera.lookAt(_headPos);
             this.mesh.visible = false;
             return;
         }
 
         this.mesh.visible = true;
 
-        // Look at Tommy's chest — so you see his full body
-        const target = new THREE.Vector3(
+        // Target = Tommy's chest
+        _camTarget.set(
             this.mesh.position.x,
             this.mesh.position.y + 0.9 + bob,
             this.mesh.position.z
         );
 
-        // Camera position: orbit behind + above
-        const cx = target.x + this.ORBIT_DIST * Math.sin(this.yaw)   * Math.cos(this.pitch);
-        const cy = target.y + this.ORBIT_DIST * Math.sin(this.pitch);
-        const cz = target.z + this.ORBIT_DIST * Math.cos(this.yaw)   * Math.cos(this.pitch);
+        // Desired camera position
+        const sinY = Math.sin(this.yaw);
+        const cosY = Math.cos(this.yaw);
+        const cosP = Math.cos(this.pitch);
+        const sinP = Math.sin(this.pitch);
+        _camPos.set(
+            _camTarget.x + this.ORBIT_DIST * sinY * cosP,
+            _camTarget.y + this.ORBIT_DIST * sinP,
+            _camTarget.z + this.ORBIT_DIST * cosY * cosP
+        );
 
+        // Lerp — no new Vector3 allocation
         const lerpT = sprinting ? 0.18 : 0.12;
-        this.camera.position.lerp(new THREE.Vector3(cx, cy, cz), lerpT);
-        this.camera.lookAt(target);
+        this.camera.position.lerp(_camPos, lerpT);
+        this.camera.lookAt(_camTarget);
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -296,12 +292,10 @@ export class Player {
         this.mesh.position.set(x, y - 1.0, z);
     }
 
-    public setInVehicle(inVehicle: boolean) {
-        this.playerInVehicle = inVehicle;
-        this.visible = !inVehicle;
+    public setInVehicle(v: boolean) {
+        this.playerInVehicle = v;
+        this.visible = !v;
     }
 
-    public getHealth()  { return 100; }
-    public getArmor()   { return 0; }
     public getWeapon(): Weapon { return this.weapon; }
 }

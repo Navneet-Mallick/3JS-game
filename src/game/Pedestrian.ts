@@ -1,132 +1,101 @@
 import * as THREE from 'three';
-import * as CANNON from 'cannon-es';
-import { Input } from './Input';
+
+// Pre-allocated — zero per-frame allocations
+const _dir = new THREE.Vector3();
 
 export class Pedestrian {
-    private scene: THREE.Scene;
-    private body: CANNON.Body;
     public mesh: THREE.Group;
-    
-    private walkSpeed = 2.5;
-    private runSpeed = 5.0;
-    private currentSpeed = 0;
-    private targetPosition: THREE.Vector3;
+
+    private walkSpeed  = 2.0;
+    private runSpeed   = 4.5;
+    private targetX    = 0;
+    private targetZ    = 0;
     private wanderTimer = 0;
-    private health = 100;
-    private isAlive = true;
+    private isAlive    = true;
 
-    constructor(scene: THREE.Scene, world: CANNON.World, position: THREE.Vector3) {
-        this.scene = scene;
-        this.targetPosition = position.clone();
-        
-        this.mesh = this.buildPedestrianModel();
+    // Shared geometry + materials across all pedestrians
+    private static _bodyGeo = new THREE.BoxGeometry(0.5, 0.8, 0.3);
+    private static _headGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
+    private static _legGeo  = new THREE.BoxGeometry(0.18, 0.55, 0.18);
+    private static _mats    = [
+        new THREE.MeshLambertMaterial({ color: 0x2a4d8f }),
+        new THREE.MeshLambertMaterial({ color: 0x8b2222 }),
+        new THREE.MeshLambertMaterial({ color: 0x228b22 }),
+        new THREE.MeshLambertMaterial({ color: 0x8b6914 }),
+    ];
+    private static _headMat = new THREE.MeshLambertMaterial({ color: 0xf4c2a1 });
+    private static _legMat  = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    private static _pedIdx  = 0;
+
+    constructor(scene: THREE.Scene, _world: unknown, position: THREE.Vector3) {
+        this.mesh = this.buildModel();
         this.mesh.position.copy(position);
-        this.scene.add(this.mesh);
-
-        this.body = new CANNON.Body({
-            mass: 70,
-            shape: new CANNON.Sphere(0.4),
-            position: new CANNON.Vec3(position.x, position.y, position.z),
-            fixedRotation: true,
-            linearDamping: 0.8,
-            angularDamping: 1.0,
-        });
-        world.addBody(this.body);
+        this.mesh.position.y = 0; // sit on ground
+        scene.add(this.mesh);
+        this.targetX = position.x;
+        this.targetZ = position.z;
     }
 
-    private buildPedestrianModel(): THREE.Group {
-        const group = new THREE.Group();
-        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2a4d8f });
-        const headMat = new THREE.MeshLambertMaterial({ color: 0xf4c2a1 });
-        const legMat  = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    private buildModel(): THREE.Group {
+        const g   = new THREE.Group();
+        const mat = Pedestrian._mats[Pedestrian._pedIdx++ % Pedestrian._mats.length];
 
-        // Body — box instead of cylinder (cheaper)
-        const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.3), bodyMat);
-        body.position.y = 0.8;
-        group.add(body);
+        const body = new THREE.Mesh(Pedestrian._bodyGeo, mat);
+        body.position.y = 0.8; g.add(body);
 
-        // Head — box instead of sphere (cheaper)
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), headMat);
-        head.position.y = 1.45;
-        group.add(head);
+        const head = new THREE.Mesh(Pedestrian._headGeo, Pedestrian._headMat);
+        head.position.y = 1.45; g.add(head);
 
-        // Legs
-        const legGeo = new THREE.BoxGeometry(0.18, 0.55, 0.18);
-        const lLeg = new THREE.Mesh(legGeo, legMat);
-        lLeg.position.set(-0.14, 0.22, 0);
-        group.add(lLeg);
-        const rLeg = new THREE.Mesh(legGeo, legMat);
-        rLeg.position.set(0.14, 0.22, 0);
-        group.add(rLeg);
+        const lLeg = new THREE.Mesh(Pedestrian._legGeo, Pedestrian._legMat);
+        lLeg.position.set(-0.14, 0.22, 0); g.add(lLeg);
+        const rLeg = new THREE.Mesh(Pedestrian._legGeo, Pedestrian._legMat);
+        rLeg.position.set(0.14, 0.22, 0); g.add(rLeg);
 
-        return group;
+        return g;
     }
 
-    public update(dt: number, playerPosition: THREE.Vector3) {
+    // Throttled update — called only when near player (LOD in Core)
+    public update(dt: number, playerPos: THREE.Vector3) {
         if (!this.isAlive) return;
 
-        // Wander behavior
+        // Wander timer
         this.wanderTimer -= dt;
         if (this.wanderTimer <= 0) {
-            this.wanderTimer = Math.random() * 4 + 2; // 2-6 seconds
-            this.setNewTarget();
+            this.wanderTimer = 3 + Math.random() * 4;
+            this.pickTarget();
         }
 
-        // Check distance to player
-        const distanceToPlayer = this.mesh.position.distanceTo(playerPosition);
-        
-        // Run away from player if too close
-        if (distanceToPlayer < 5) {
-            const fleeDirection = this.mesh.position.clone().sub(playerPosition).normalize();
-            this.targetPosition = this.mesh.position.clone().add(fleeDirection.multiplyScalar(10));
-            this.currentSpeed = this.runSpeed;
-        } else {
-            this.currentSpeed = this.walkSpeed;
+        // Flee if player is close
+        const dx = this.mesh.position.x - playerPos.x;
+        const dz = this.mesh.position.z - playerPos.z;
+        const distSq = dx * dx + dz * dz;
+        const speed  = distSq < 25 ? this.runSpeed : this.walkSpeed; // 5m radius
+
+        if (distSq < 25) {
+            // Flee direction — no allocation
+            const len = Math.sqrt(distSq) || 1;
+            this.targetX = this.mesh.position.x + (dx / len) * 12;
+            this.targetZ = this.mesh.position.z + (dz / len) * 12;
         }
 
-        // Move towards target
-        const direction = this.targetPosition.clone().sub(this.mesh.position).normalize();
-        if (direction.length() > 0.1) {
-            this.body.velocity.x = direction.x * this.currentSpeed;
-            this.body.velocity.z = direction.z * this.currentSpeed;
-            
-            // Rotate to face movement direction
-            const targetY = Math.atan2(direction.x, direction.z);
-            this.mesh.rotation.y += (targetY - this.mesh.rotation.y) * 0.1;
+        // Move toward target — reuse _dir
+        _dir.set(this.targetX - this.mesh.position.x, 0, this.targetZ - this.mesh.position.z);
+        const dist = _dir.length();
+        if (dist > 0.5) {
+            _dir.multiplyScalar(speed * dt / dist);
+            this.mesh.position.x += _dir.x;
+            this.mesh.position.z += _dir.z;
+            // Face movement direction
+            this.mesh.rotation.y = Math.atan2(_dir.x, _dir.z);
         }
-
-        // Sync physics with mesh
-        this.mesh.position.set(
-            this.body.position.x,
-            this.body.position.y - 0.4,
-            this.body.position.z
-        );
     }
 
-    private setNewTarget() {
+    private pickTarget() {
         const angle = Math.random() * Math.PI * 2;
-        const distance = Math.random() * 15 + 5;
-        this.targetPosition = new THREE.Vector3(
-            this.mesh.position.x + Math.sin(angle) * distance,
-            this.mesh.position.y,
-            this.mesh.position.z + Math.cos(angle) * distance
-        );
+        const dist  = 8 + Math.random() * 12;
+        this.targetX = this.mesh.position.x + Math.sin(angle) * dist;
+        this.targetZ = this.mesh.position.z + Math.cos(angle) * dist;
     }
 
-    public takeDamage(damage: number) {
-        this.health -= damage;
-        if (this.health <= 0 && this.isAlive) {
-            this.isAlive = false;
-            this.mesh.visible = false;
-            // Ragdoll effect could be added here
-        }
-    }
-
-    public getPosition(): THREE.Vector3 {
-        return this.mesh.position;
-    }
-
-    public isAliveStatus(): boolean {
-        return this.isAlive;
-    }
+    public getPosition() { return this.mesh.position; }
 }
