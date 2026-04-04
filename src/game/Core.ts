@@ -278,27 +278,28 @@ export class Core {
         if (!enterKey) return;
 
         if (this.playerInVehicle) {
+            // Exit vehicle
             this.player.setInVehicle(false);
             this.playerInVehicle = false;
             this.vehicle.isOccupied = false;
-            this.vehicle.chassisMesh.visible = true;
-            this.scene.getCamera().parent = this.scene.getScene();
-            this.modeBadge!.textContent = 'ON FOOT';
-            this.modeBadge!.style.color = '#00ff00';
+            this.vehicle.setVisible(true);
+            // Place player beside the car
+            const vp = this.vehicle.getPosition();
+            this.player.setPosition(vp.x + 2.5, vp.y + 1, vp.z);
+            if (this.modeBadge) { this.modeBadge.textContent = 'ON FOOT'; this.modeBadge.style.color = '#00ff00'; }
+            if (this.speedoEl) this.speedoEl.classList.remove('active');
+            this.sound.stopEngine();
         } else {
             const distance = this.player.getPosition().distanceTo(this.vehicle.getPosition());
-            if (distance < 4) {
+            if (distance < 5) {
                 this.playerInVehicle = true;
                 this.player.setInVehicle(true);
                 this.vehicle.isOccupied = true;
-                this.vehicle.chassisMesh.visible = false;
-                this.modeBadge!.textContent = 'IN VEHICLE';
-                this.modeBadge!.style.color = '#ffff00';
+                this.vehicle.setVisible(false);
+                if (this.modeBadge) { this.modeBadge.textContent = 'IN VEHICLE'; this.modeBadge.style.color = '#ffff00'; }
+                if (this.speedoEl) this.speedoEl.classList.add('active');
+                this.sound.startEngine();
             }
-        }
-        if (this.speedoEl) {
-            this.speedoEl.classList.add('active');
-            this.sound.startEngine();
         }
     }
 
@@ -417,7 +418,13 @@ export class Core {
      private animate(time: number) {
     requestAnimationFrame((t) => this.animate(t));
 
-    if (this.paused) return;
+    // Allow enter/exit even when paused (no pointer lock needed for F key)
+    this.handleEnterExit();
+
+    if (this.paused) {
+        Input.clearPerFrameData();
+        return;
+    }
 
     try {
         GamepadInput.poll();
@@ -425,7 +432,6 @@ export class Core {
         const dt = Math.min(0.05, (time - this.lastTime) / 1000);
         this.lastTime = time;
 
-        this.handleEnterExit();
         this.handleShortcuts();
         this.physics.update(dt);
         this.player.update(dt);
@@ -487,6 +493,8 @@ export class Core {
         if (!this.playerInVehicle && this.enterPrompt) {
             const dist = this.vehicle.getPosition().distanceTo(this.player.getPosition());
             this.enterPrompt.style.display = dist < 6 ? 'flex' : 'none';
+        } else if (this.playerInVehicle && this.enterPrompt) {
+            this.enterPrompt.style.display = 'none';
         }
 
         this.minimap.update(pos);

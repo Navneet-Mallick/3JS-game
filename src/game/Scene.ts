@@ -1,27 +1,27 @@
 import * as THREE from 'three';
-import { EffectComposer, RenderPass, UnrealBloomPass } from 'three-stdlib';
 
 export class GameScene {
     private scene: THREE.Scene;
     private camera: THREE.PerspectiveCamera;
     private renderer: THREE.WebGLRenderer;
-    private composer: EffectComposer;
 
     constructor() {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x87CEEB);
-        this.scene.fog = new THREE.FogExp2(0x87CEEB, 0.002);
+        // Lighter fog — less draw-call pressure, still gives depth
+        this.scene.fog = new THREE.Fog(0x87CEEB, 80, 300);
 
-        this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 800);
-        this.camera.position.set(0, 8, 12);
+        this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
+        this.camera.position.set(0, 6, 10);
 
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.4;
+        // Cap at 1x pixel ratio for performance — looks fine on most screens
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+        this.renderer.toneMapping = THREE.LinearToneMapping;
+        this.renderer.toneMappingExposure = 1.0;
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFShadowMap;
+        this.renderer.shadowMap.type = THREE.BasicShadowMap; // cheapest shadow type
 
         const canvas = this.renderer.domElement;
         canvas.style.position = 'fixed';
@@ -32,33 +32,23 @@ export class GameScene {
         canvas.style.zIndex = '0';
         document.body.appendChild(canvas);
 
-        // Ambient — bright daylight
-        const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+        // Bright ambient — reduces need for many shadow-casting lights
+        const ambient = new THREE.AmbientLight(0xffffff, 1.0);
         this.scene.add(ambient);
 
-        // Sun-like directional
-        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+        // Single directional sun — reduced shadow map size
+        const sun = new THREE.DirectionalLight(0xfffbe8, 1.0);
         sun.position.set(50, 100, 50);
         sun.castShadow = true;
-        sun.shadow.mapSize.set(2048, 2048);
+        sun.shadow.mapSize.set(1024, 1024); // was 2048 — halved for perf
         sun.shadow.camera.near = 1;
-        sun.shadow.camera.far = 400;
-        sun.shadow.camera.left = -150;
-        sun.shadow.camera.right = 150;
-        sun.shadow.camera.top = 150;
-        sun.shadow.camera.bottom = -150;
+        sun.shadow.camera.far  = 300;
+        sun.shadow.camera.left   = -120;
+        sun.shadow.camera.right  =  120;
+        sun.shadow.camera.top    =  120;
+        sun.shadow.camera.bottom = -120;
         sun.shadow.bias = -0.001;
         this.scene.add(sun);
-
-        // Post-processing
-        this.composer = new EffectComposer(this.renderer);
-        this.composer.addPass(new RenderPass(this.scene, this.camera));
-
-        const bloom = new UnrealBloomPass(
-            new THREE.Vector2(window.innerWidth, window.innerHeight),
-            0.3, 0.2, 0.6
-        );
-        this.composer.addPass(bloom);
 
         window.addEventListener('resize', () => this.onWindowResize());
     }
@@ -67,13 +57,12 @@ export class GameScene {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.composer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    public getScene() { return this.scene; }
+    public getScene()  { return this.scene; }
     public getCamera() { return this.camera; }
 
     public render() {
-        this.composer.render();
+        this.renderer.render(this.scene, this.camera);
     }
 }

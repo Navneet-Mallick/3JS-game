@@ -8,6 +8,7 @@ export class Input {
 
     public static init() {
         window.addEventListener('keydown', (e) => {
+            // Prevent page scroll for arrow keys and space
             if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(e.key.toLowerCase())) {
                 e.preventDefault();
             }

@@ -13,7 +13,7 @@ export class Vehicle {
     public chassisBody: CANNON.Body;
     private vehicle: CANNON.RaycastVehicle;
     private wheelMeshes: THREE.Group[] = [];
-    private taillightMats: THREE.MeshStandardMaterial[] = [];
+    private taillightMats: THREE.MeshLambertMaterial[] = [];
 
     public isOccupied = false;
     public lateralSpeed = 0;
@@ -97,17 +97,11 @@ export class Vehicle {
     private buildCarModel(): THREE.Group {
         const g = new THREE.Group();
 
-        const paint = new THREE.MeshPhysicalMaterial({
-            color: 0x2a4d8f, roughness: 0.2, metalness: 0.9,
-            clearcoat: 1.0, clearcoatRoughness: 0.1
-        });
-        const glass = new THREE.MeshPhysicalMaterial({
-            color: 0x001830, roughness: 0.0, metalness: 0.05,
-            transparent: true, opacity: 0.55,
-        });
-        const chrome = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 1.0, roughness: 0.05 });
-        const hlMat  = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffee, emissiveIntensity: 8 });
-        const tlMat  = new THREE.MeshStandardMaterial({ color: 0xff2200, emissive: 0xff1100, emissiveIntensity: 3 });
+        const paint = new THREE.MeshLambertMaterial({ color: 0x2a4d8f });
+        const glass = new THREE.MeshLambertMaterial({ color: 0x223344, transparent: true, opacity: 0.5 });
+        const chrome = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+        const hlMat  = new THREE.MeshLambertMaterial({ color: 0xffffee, emissive: 0xffffee, emissiveIntensity: 1 });
+        const tlMat  = new THREE.MeshLambertMaterial({ color: 0xff2200, emissive: 0xff1100, emissiveIntensity: 1 });
         this.taillightMats.push(tlMat);
 
         // Main body — slightly tapered shape using scaled boxes
@@ -149,15 +143,7 @@ export class Vehicle {
         hlL.position.set(-0.62, 0.1, 2.32); g.add(hlL);
         const hlR = hlL.clone(); hlR.position.set(0.62, 0.1, 2.32); g.add(hlR);
 
-        // Headlight beams
-        [-0.62, 0.62].forEach(x => {
-            const spot = new THREE.SpotLight(0xfff8e8, 8, 50, Math.PI / 8, 0.35, 1.2);
-            spot.position.set(x, 0.1, 2.35);
-            const tgt = new THREE.Object3D();
-            tgt.position.set(x * 0.4, -0.8, 18);
-            g.add(tgt); spot.target = tgt;
-            spot.castShadow = false; g.add(spot);
-        });
+        // Headlight glow — emissive mesh only, no SpotLights (perf)
 
         // Taillights
         const tlL = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.13, 0.06), tlMat);
@@ -171,10 +157,7 @@ export class Vehicle {
             pipe.position.set(x, -0.28, -2.38); g.add(pipe);
         });
 
-        // Underglow
-        const underglow = new THREE.PointLight(0x4400ff, 2.5, 8);
-        underglow.position.set(0, -0.45, 0); g.add(underglow);
-
+        // No underglow PointLight — removed for performance
         return g;
     }
 
@@ -233,10 +216,10 @@ export class Vehicle {
         let handbrake = false, throttle = false;
 
         if (this.isOccupied) {
-            if (Input.isKeyDown('w')) { force =  ENGINE_FORCE; throttle = true; }
-            if (Input.isKeyDown('s')) { force = -ENGINE_FORCE * 0.45; }
-            if (Input.isKeyDown('a')) steer =  MAX_STEER;
-            if (Input.isKeyDown('d')) steer = -MAX_STEER;
+            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    { force =  ENGINE_FORCE; throttle = true; }
+            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  { force = -ENGINE_FORCE * 0.45; }
+            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  steer =  MAX_STEER;
+            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
             handbrake = Input.isKeyDown(' ');
 
             if (GamepadInput.connected) {
@@ -246,14 +229,14 @@ export class Vehicle {
                 if (GamepadInput.btnLB) handbrake = true;
             }
 
-            const braking = Input.isKeyDown('s') || handbrake || (GamepadInput.connected && GamepadInput.lt > 0.1);
-            this.taillightMats.forEach(m => m.emissiveIntensity = braking ? 10 : 3);
+            const braking = Input.isKeyDown('s') || Input.isKeyDown('arrowdown') || handbrake || (GamepadInput.connected && GamepadInput.lt > 0.1);
+            this.taillightMats.forEach(m => m.emissive.setHex(braking ? 0xff4400 : 0xff1100));
 
             this.sound.updateEngine(spd * gearRatio * 0.6, throttle);
             this.updateCamera(dt);
         } else {
             brake = 18;
-            this.taillightMats.forEach(m => m.emissiveIntensity = 0.8);
+            this.taillightMats.forEach(m => m.emissive.setHex(0x330000));
         }
 
         // Lateral speed for drift
@@ -347,6 +330,11 @@ export class Vehicle {
 
     public getPosition() { return this.chassisMesh.position; }
     public getGear()     { return this.gear; }
+
+    public setVisible(visible: boolean) {
+        this.chassisMesh.visible = visible;
+        this.wheelMeshes.forEach(w => w.visible = visible);
+    }
 
     public getSpeedKmh(): number {
         const v = this.chassisBody.velocity;
