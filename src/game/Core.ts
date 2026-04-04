@@ -498,3 +498,4 @@ export class Core {
         console.error('GAME LOOP CRASH:', err); // ← will show exact crash location
     }
 }
+}
