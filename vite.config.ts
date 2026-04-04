@@ -1,13 +1,18 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  server: {
-    hmr: {
-      protocol: 'ws',
-      host: 'localhost',
-    },
-  },
   build: {
-    chunkSizeWarningLimit: 1000,
+    outDir: 'dist',
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        // Split vendor chunks for better caching
+        manualChunks: {
+          three:    ['three'],
+          cannon:   ['cannon-es'],
+          stdlib:   ['three-stdlib'],
+        },
+      },
+    },
   },
 });
