@@ -36,45 +36,28 @@ export class Pedestrian {
 
     private buildPedestrianModel(): THREE.Group {
         const group = new THREE.Group();
-        
-        // Body
-        const bodyGeometry = new THREE.CylinderGeometry(0.3, 0.4, 0.8, 8);
-        const bodyMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x2a4d8f, // Blue shirt
-            roughness: 0.7
-        });
-        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2a4d8f });
+        const headMat = new THREE.MeshLambertMaterial({ color: 0xf4c2a1 });
+        const legMat  = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+
+        // Body — box instead of cylinder (cheaper)
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.3), bodyMat);
         body.position.y = 0.8;
-        body.castShadow = true;
         group.add(body);
 
-        // Head
-        const headGeometry = new THREE.SphereGeometry(0.25, 8, 8);
-        const headMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0xf4c2a1, // Skin tone
-            roughness: 0.8
-        });
-        const head = new THREE.Mesh(headGeometry, headMaterial);
-        head.position.y = 1.4;
-        head.castShadow = true;
+        // Head — box instead of sphere (cheaper)
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), headMat);
+        head.position.y = 1.45;
         group.add(head);
 
         // Legs
-        const legGeometry = new THREE.CylinderGeometry(0.1, 0.12, 0.6, 6);
-        const legMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x1a1a1a, // Dark pants
-            roughness: 0.9
-        });
-        
-        const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
-        leftLeg.position.set(-0.15, 0.2, 0);
-        leftLeg.castShadow = true;
-        group.add(leftLeg);
-
-        const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
-        rightLeg.position.set(0.15, 0.2, 0);
-        rightLeg.castShadow = true;
-        group.add(rightLeg);
+        const legGeo = new THREE.BoxGeometry(0.18, 0.55, 0.18);
+        const lLeg = new THREE.Mesh(legGeo, legMat);
+        lLeg.position.set(-0.14, 0.22, 0);
+        group.add(lLeg);
+        const rLeg = new THREE.Mesh(legGeo, legMat);
+        rLeg.position.set(0.14, 0.22, 0);
+        group.add(rLeg);
 
         return group;
     }

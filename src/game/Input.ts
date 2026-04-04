@@ -1,14 +1,15 @@
 export class Input {
-    private static keys: Record<string, boolean> = {};
+    private static keys:      Record<string, boolean> = {};
     private static keyPresses: Record<string, boolean> = {};
 
-    public static movementX = 0;
-    public static movementY = 0;
+    public static movementX       = 0;
+    public static movementY       = 0;
     public static isPointerLocked = false;
 
     public static init() {
+        // ── Keyboard ──────────────────────────────────────────────────────────
         window.addEventListener('keydown', (e) => {
-            // Prevent page scroll for arrow keys and space
+            // Prevent page scroll for game keys
             if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(e.key.toLowerCase())) {
                 e.preventDefault();
             }
@@ -21,33 +22,25 @@ export class Input {
             this.keys[e.key.toLowerCase()] = false;
         });
 
-        // Use document.body as click target — always exists
-        // Pointer lock will be requested on the canvas once it exists
-document.addEventListener('click', () => {
-    if (this.isPointerLocked) return;
-    // Use document.body instead of canvas for pointer lock
-    document.body.requestPointerLock();
-});
-
-// ADD THIS — keyboard works without pointer lock
-document.addEventListener('keydown', (e) => {
-    // already handled above, but ensure canvas is focused
-    const canvas = document.querySelector('canvas');
-    if (canvas && document.activeElement !== canvas) {
-        canvas.setAttribute('tabindex', '0');
-        canvas.focus();
-    }
-});
+        // ── Pointer lock ──────────────────────────────────────────────────────
+        document.addEventListener('click', () => {
+            if (!this.isPointerLocked) document.body.requestPointerLock();
+        });
 
         document.addEventListener('pointerlockchange', () => {
             this.isPointerLocked = !!document.pointerLockElement;
         });
 
+        // ── Mouse look ────────────────────────────────────────────────────────
+        // Works WITH pointer lock (raw delta) AND without (relative movement)
         document.addEventListener('mousemove', (e) => {
             if (this.isPointerLocked) {
+                // Pointer locked — use raw movementX/Y (no cursor boundary issues)
                 this.movementX += e.movementX || 0;
                 this.movementY += e.movementY || 0;
             }
+            // Without pointer lock mouse look is disabled (cursor visible)
+            // Player can still use keyboard to move
         });
     }
 

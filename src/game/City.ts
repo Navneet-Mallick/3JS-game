@@ -1,5 +1,6 @@
 ﻿import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const BLOCK  = 60;
 const ROAD   = 18;
@@ -25,119 +26,142 @@ export class City {
         this.buildRoads(scene);
         this.buildBlocks(scene, world);
         this.buildStreetLights(scene);
-        this.buildCollectibles(scene, world);
+        this.buildCollectibles(scene);
         this.buildDestructibles(scene, world);
-        this.buildPowerUps(scene, world);
+        this.buildPowerUps(scene);
     }
 
     public getCollectibles() { return this.collectibles; }
     public getDestructibles() { return this.destructibles; }
-    public getPowerUps() { return this.powerUps; }
+    public getPowerUps()      { return this.powerUps; }
 
     private buildGround(scene: THREE.Scene, world: CANNON.World, groundMaterial: CANNON.Material) {
+        // Single large ground plane — MeshLambertMaterial, no shadow receive needed
         const mesh = new THREE.Mesh(
             new THREE.PlaneGeometry(2000, 2000),
-            new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.8 })
+            new THREE.MeshLambertMaterial({ color: 0x3a3a3a })
         );
         mesh.rotation.x = -Math.PI / 2;
-        mesh.receiveShadow = true;
         scene.add(mesh);
-        const body = new CANNON.Body({ 
-            type: CANNON.Body.STATIC, 
+
+        const body = new CANNON.Body({
+            type: CANNON.Body.STATIC,
             shape: new CANNON.Plane(),
-            material: groundMaterial 
+            material: groundMaterial
         });
         body.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
         world.addBody(body);
     }
 
     private buildRoads(scene: THREE.Scene) {
-        const roadMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.8 });
-        const dashMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0xffcc00, emissiveIntensity: 0.3 });
-        const edgeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.15 });
-        const half = ((EXTENT * 2 + 1) * STEP) / 2 + ROAD;
+        // Merge ALL road geometry into a single draw call using BufferGeometryUtils
+        const roadMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+        const dashMat = new THREE.MeshLambertMaterial({ color: 0xddaa00 });
+        const half    = ((EXTENT * 2 + 1) * STEP) / 2 + ROAD;
+
+        const roadGeos: THREE.BufferGeometry[] = [];
+        const dashGeos: THREE.BufferGeometry[] = [];
 
         for (let i = -EXTENT; i <= EXTENT + 1; i++) {
-            const z = i * STEP - STEP / 2;
-            const hRoad = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, ROAD), roadMat);
-            hRoad.rotation.x = -Math.PI / 2;
-            hRoad.position.set(0, 0.01, z);
-            hRoad.receiveShadow = true;
-            scene.add(hRoad);
-            for (let x = -half; x < half; x += 8) {
-                const dash = new THREE.Mesh(new THREE.PlaneGeometry(4, 0.2), dashMat);
-                dash.rotation.x = -Math.PI / 2;
-                dash.position.set(x + 2, 0.02, z);
-                scene.add(dash);
-            }
-            for (const off of [-ROAD / 2 + 0.3, ROAD / 2 - 0.3]) {
-                const edge = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, 0.25), edgeMat);
-                edge.rotation.x = -Math.PI / 2;
-                edge.position.set(0, 0.02, z + off);
-                scene.add(edge);
-            }
-            const vRoad = new THREE.Mesh(new THREE.PlaneGeometry(ROAD, half * 2), roadMat);
-            vRoad.rotation.x = -Math.PI / 2;
-            vRoad.position.set(z, 0.01, 0);
-            vRoad.receiveShadow = true;
-            scene.add(vRoad);
-            for (let zz = -half; zz < half; zz += 8) {
-                const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 4), dashMat);
-                dash.rotation.x = -Math.PI / 2;
-                dash.position.set(z, 0.02, zz + 2);
-                scene.add(dash);
+            const offset = i * STEP - STEP / 2;
+
+            // Horizontal road strip
+            const hg = new THREE.PlaneGeometry(half * 2, ROAD);
+            hg.rotateX(-Math.PI / 2);
+            hg.translate(0, 0.01, offset);
+            roadGeos.push(hg);
+
+            // Vertical road strip
+            const vg = new THREE.PlaneGeometry(ROAD, half * 2);
+            vg.rotateX(-Math.PI / 2);
+            vg.translate(offset, 0.01, 0);
+            roadGeos.push(vg);
+
+            // Centre dashes — merged
+            for (let x = -half; x < half; x += 10) {
+                const dh = new THREE.PlaneGeometry(5, 0.25);
+                dh.rotateX(-Math.PI / 2);
+                dh.translate(x + 2.5, 0.02, offset);
+                dashGeos.push(dh);
+
+                const dv = new THREE.PlaneGeometry(0.25, 5);
+                dv.rotateX(-Math.PI / 2);
+                dv.translate(offset, 0.02, x + 2.5);
+                dashGeos.push(dv);
             }
         }
+
+        // Merge into single mesh each
+        const mergedRoad = mergeGeometries(roadGeos);
+        const mergedDash = mergeGeometries(dashGeos);
+        if (mergedRoad) scene.add(new THREE.Mesh(mergedRoad, roadMat));
+        if (mergedDash) scene.add(new THREE.Mesh(mergedDash, dashMat));
+
+        // Dispose source geos
+        roadGeos.forEach(g => g.dispose());
+        dashGeos.forEach(g => g.dispose());
     }
 
     private buildBlocks(scene: THREE.Scene, world: CANNON.World) {
         const rng = mulberry32(42);
+
+        // Shared materials — Lambert only, no metalness/roughness PBR cost
         const mats = [
-            new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.6, metalness: 0.4 }),
-            new THREE.MeshStandardMaterial({ color: 0x0a0a14, roughness: 0.2, metalness: 0.8 }),
-            new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.9, metalness: 0.1 }),
+            new THREE.MeshLambertMaterial({ color: 0x1a1a28 }),
+            new THREE.MeshLambertMaterial({ color: 0x0e0e1c }),
+            new THREE.MeshLambertMaterial({ color: 0x222230 }),
+            new THREE.MeshLambertMaterial({ color: 0x181820 }),
         ];
-        const neonColors = [0x00f2ff, 0x7000ff, 0xff0055, 0x00ffaa];
+        // Neon accent — emissive only, NO PointLights
+        const neonMats = [
+            new THREE.MeshBasicMaterial({ color: 0x00eeff }),
+            new THREE.MeshBasicMaterial({ color: 0x8800ff }),
+            new THREE.MeshBasicMaterial({ color: 0xff0055 }),
+            new THREE.MeshBasicMaterial({ color: 0x00ffaa }),
+        ];
 
         for (let bx = -EXTENT; bx <= EXTENT; bx++) {
             for (let bz = -EXTENT; bz <= EXTENT; bz++) {
                 if (bx === 0 && bz === 0) continue;
-                const cx = bx * STEP;
-                const cz = bz * STEP;
+                const cx   = bx * STEP;
+                const cz   = bz * STEP;
                 const dist = Math.sqrt(bx * bx + bz * bz);
                 const numB = Math.floor(rng() * 3) + 1;
+
                 for (let i = 0; i < numB; i++) {
-                    const w = 8 + rng() * 14;
-                    const d = 8 + rng() * 14;
-                    const h = 10 + rng() * Math.max(12, 80 - dist * 8);
-                    const mat = mats[Math.floor(rng() * mats.length)];
+                    const w  = 8  + rng() * 14;
+                    const d  = 8  + rng() * 14;
+                    const h  = 10 + rng() * Math.max(12, 80 - dist * 8);
                     const ox = (rng() - 0.5) * (BLOCK - w - 2);
                     const oz = (rng() - 0.5) * (BLOCK - d - 2);
+                    const mat = mats[Math.floor(rng() * mats.length)];
+
                     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
                     mesh.position.set(cx + ox, h / 2, cz + oz);
-                    mesh.castShadow = true;
-                    mesh.receiveShadow = true;
+                    mesh.castShadow = false; // buildings don't cast — huge perf win
+                    mesh.receiveShadow = false;
                     scene.add(mesh);
+
+                    // Physics body
                     world.addBody(new CANNON.Body({
                         type: CANNON.Body.STATIC,
                         shape: new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)),
                         position: new CANNON.Vec3(cx + ox, h / 2, cz + oz),
                     }));
-                    if (rng() > 0.45) {
-                        const nc = neonColors[Math.floor(rng() * neonColors.length)];
-                        const nMat = new THREE.MeshBasicMaterial({ color: nc });
+
+                    // Neon accent — emissive mesh only, zero lights
+                    if (rng() > 0.5) {
+                        const nm = neonMats[Math.floor(rng() * neonMats.length)];
                         if (rng() > 0.5) {
-                            const strip = new THREE.Mesh(new THREE.BoxGeometry(0.4, h * 0.7, 0.4), nMat);
-                            strip.position.set(cx + ox + w / 2, h * 0.65, cz + oz + d / 2);
+                            const strip = new THREE.Mesh(new THREE.BoxGeometry(0.3, h * 0.6, 0.3), nm);
+                            strip.position.set(cx + ox + w / 2, h * 0.6, cz + oz + d / 2);
                             scene.add(strip);
                         } else {
-                            const crown = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.8, d + 0.4), nMat);
-                            crown.position.set(cx + ox, h - 0.4, cz + oz);
+                            const crown = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.6, d + 0.3), nm);
+                            crown.position.set(cx + ox, h - 0.3, cz + oz);
                             scene.add(crown);
                         }
-                        const pl = new THREE.PointLight(nc, 1.5, 20);
-                        pl.position.set(cx + ox, h + 1, cz + oz);
-                        scene.add(pl);
+                        // NO PointLight — emissive colour gives the visual, zero GPU cost
                     }
                 }
             }
@@ -145,136 +169,96 @@ export class City {
     }
 
     private buildStreetLights(scene: THREE.Scene) {
-        const poleMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 });
-        const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffcc, emissiveIntensity: 3 });
+        // Poles only — NO PointLights. Ambient light handles illumination.
+        const poleMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+        const lampMat = new THREE.MeshBasicMaterial({ color: 0xffffcc }); // BasicMaterial = free
+
+        const poleGeos: THREE.BufferGeometry[] = [];
+        const lampGeos: THREE.BufferGeometry[] = [];
+
         for (let bx = -EXTENT; bx <= EXTENT + 1; bx++) {
             for (let bz = -EXTENT; bz <= EXTENT + 1; bz++) {
                 const x = bx * STEP - STEP / 2;
                 const z = bz * STEP - STEP / 2;
-                const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 8, 6), poleMat);
-                pole.position.set(x, 4, z);
-                scene.add(pole);
-                const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.6), lampMat);
-                lamp.position.set(x, 8.1, z);
-                scene.add(lamp);
-                const light = new THREE.PointLight(0xffffaa, 2, 28);
-                light.position.set(x, 8, z);
-                scene.add(light);
+
+                const pg = new THREE.CylinderGeometry(0.08, 0.08, 7, 5);
+                pg.translate(x, 3.5, z);
+                poleGeos.push(pg);
+
+                const lg = new THREE.BoxGeometry(0.5, 0.18, 0.5);
+                lg.translate(x, 7.1, z);
+                lampGeos.push(lg);
             }
         }
+
+        const mergedPoles = mergeGeometries(poleGeos);
+        const mergedLamps = mergeGeometries(lampGeos);
+        if (mergedPoles) scene.add(new THREE.Mesh(mergedPoles, poleMat));
+        if (mergedLamps) scene.add(new THREE.Mesh(mergedLamps, lampMat));
+
+        poleGeos.forEach(g => g.dispose());
+        lampGeos.forEach(g => g.dispose());
     }
 
-    private buildCollectibles(scene: THREE.Scene, world: CANNON.World) {
-        const collectiblePositions: [number, number, number][] = [
+    private buildCollectibles(scene: THREE.Scene) {
+        const positions: [number, number, number][] = [
             [15, 1, 15], [-15, 1, 15], [15, 1, -15], [-15, 1, -15],
-            [40, 1, 0], [-40, 1, 0], [0, 1, 40], [0, 1, -40],
-            [30, 1, 30], [-30, 1, 30], [30, 1, -30], [-30, 1, -30]
+            [40, 1, 0],  [-40, 1, 0],  [0, 1, 40],   [0, 1, -40],
         ];
+        // Shared geometry + material — instanced would be ideal but this is fine for 8
+        const geo = new THREE.OctahedronGeometry(0.7, 0);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
 
-        collectiblePositions.forEach(([x, y, z], index) => {
-            const geometry = new THREE.OctahedronGeometry(0.8, 0);
-            const material = new THREE.MeshStandardMaterial({
-                color: 0x00ff88,
-                emissive: 0x00ff88,
-                emissiveIntensity: 0.5,
-                metalness: 0.8,
-                roughness: 0.2
-            });
-            const collectible = new THREE.Mesh(geometry, material);
-            collectible.position.set(x, y, z);
-            collectible.castShadow = true;
-            collectible.userData = { type: 'collectible', id: index, collected: false };
-            
-            // Add rotation animation
-            collectible.userData.rotationSpeed = Math.random() * 0.02 + 0.01;
-            
-            scene.add(collectible);
-            this.collectibles.push(collectible);
-
-            // Add physics body for collision detection
-            const body = new CANNON.Body({
-                mass: 0,
-                shape: new CANNON.Sphere(0.8),
-                position: new CANNON.Vec3(x, y, z)
-            });
-            body.collisionFilterGroup = 2; // Collectible group
-            body.collisionFilterMask = 1; // Collide with player/vehicle
-            world.addBody(body);
+        positions.forEach(([x, y, z], i) => {
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, z);
+            mesh.userData = { type: 'collectible', id: i, collected: false, rotationSpeed: 0.025 };
+            scene.add(mesh);
+            this.collectibles.push(mesh);
         });
     }
 
     private buildDestructibles(scene: THREE.Scene, world: CANNON.World) {
-        const destructiblePositions: [number, number, number][] = [
+        const positions: [number, number, number][] = [
             [25, 1, 10], [-25, 1, 10], [25, 1, -10], [-25, 1, -10],
-            [10, 1, 25], [10, 1, -25], [-10, 1, 25], [-10, 1, -25]
+            [10, 1, 25], [10, 1, -25], [-10, 1, 25], [-10, 1, -25],
         ];
+        const geo = new THREE.BoxGeometry(2, 2, 2);
+        const mat = new THREE.MeshLambertMaterial({ color: 0xcc3333 });
 
-        destructiblePositions.forEach(([x, y, z], index) => {
-            const geometry = new THREE.BoxGeometry(2, 2, 2);
-            const material = new THREE.MeshStandardMaterial({
-                color: 0xff4444,
-                roughness: 0.7,
-                metalness: 0.3
-            });
-            const destructible = new THREE.Mesh(geometry, material);
-            destructible.position.set(x, y, z);
-            destructible.castShadow = true;
-            destructible.receiveShadow = true;
-            destructible.userData = { type: 'destructible', id: index, health: 100 };
-            
-            scene.add(destructible);
+        positions.forEach(([x, y, z], i) => {
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = false;
+            mesh.userData = { type: 'destructible', id: i, health: 100 };
+            scene.add(mesh);
 
             const body = new CANNON.Body({
                 mass: 50,
                 shape: new CANNON.Box(new CANNON.Vec3(1, 1, 1)),
-                position: new CANNON.Vec3(x, y, z)
+                position: new CANNON.Vec3(x, y, z),
             });
-            body.collisionFilterGroup = 4; // Destructible group
-            body.collisionFilterMask = 1; // Collide with player/vehicle
             world.addBody(body);
-
-            this.destructibles.push({ mesh: destructible, body, health: 100 });
+            this.destructibles.push({ mesh, body, health: 100 });
         });
     }
 
-    private buildPowerUps(scene: THREE.Scene, world: CANNON.World) {
-        const powerUpPositions: [number, number, number][] = [
+    private buildPowerUps(scene: THREE.Scene) {
+        const positions: [number, number, number][] = [
             [20, 1, 0], [-20, 1, 0], [0, 1, 20], [0, 1, -20],
-            [35, 1, 15], [-35, 1, 15], [35, 1, -15], [-35, 1, -15]
         ];
+        const geo = new THREE.TetrahedronGeometry(0.6, 0);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
 
-        powerUpPositions.forEach(([x, y, z], index) => {
-            const geometry = new THREE.TetrahedronGeometry(0.6, 0);
-            const material = new THREE.MeshStandardMaterial({
-                color: 0xff00ff,
-                emissive: 0xff00ff,
-                emissiveIntensity: 0.8,
-                metalness: 0.7,
-                roughness: 0.3
-            });
-            const powerUp = new THREE.Mesh(geometry, material);
-            powerUp.position.set(x, y, z);
-            powerUp.castShadow = true;
-            powerUp.userData = { 
-                type: 'powerup', 
-                id: index, 
-                collected: false,
-                powerType: 'speed',
-                rotationSpeed: Math.random() * 0.03 + 0.02
+        positions.forEach(([x, y, z], i) => {
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, z);
+            mesh.userData = {
+                type: 'powerup', id: i, collected: false,
+                powerType: 'speed', rotationSpeed: 0.03
             };
-            
-            scene.add(powerUp);
-            this.powerUps.push(powerUp);
-
-            // Add physics body for collision detection
-            const body = new CANNON.Body({
-                mass: 0,
-                shape: new CANNON.Sphere(0.6),
-                position: new CANNON.Vec3(x, y, z)
-            });
-            body.collisionFilterGroup = 8; // Power-up group
-            body.collisionFilterMask = 1; // Collide with player/vehicle
-            world.addBody(body);
+            scene.add(mesh);
+            this.powerUps.push(mesh);
         });
     }
 }

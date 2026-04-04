@@ -48,9 +48,10 @@ export class TrafficCar {
 
         const chassisShape = new CANNON.Box(new CANNON.Vec3(0.9, 0.3, 2.0));
         this.chassisBody = new CANNON.Body({ mass: 1000, shape: chassisShape });
-        this.chassisBody.position.copy(position);
+        // Spawn high enough so wheels reach ground: wheel_radius(0.35) + rest(0.28) + half_height(0.3) ≈ 1.0
+        this.chassisBody.position.set(position.x, position.y + 1.0, position.z);
         this.chassisBody.linearDamping  = 0.1;
-        this.chassisBody.angularDamping = 0.5;
+        this.chassisBody.angularDamping = 0.6;
         this.chassisBody.quaternion.setFromEuler(0, Math.random() * Math.PI * 2, 0);
         world.addBody(this.chassisBody);
 
@@ -80,7 +81,7 @@ export class TrafficCar {
             customSlidingFrictionWheelStep: 1,
         };
 
-        const wPos = [[-0.85,-0.25,1.4],[0.85,-0.25,1.4],[-0.85,-0.25,-1.4],[0.85,-0.25,-1.4]];
+        const wPos = [[-0.85,-0.1,1.4],[0.85,-0.1,1.4],[-0.85,-0.1,-1.4],[0.85,-0.1,-1.4]];
         wPos.forEach(p => {
             wheelOpts.chassisConnectionPointLocal.set(p[0], p[1], p[2]);
             this.vehicle.addWheel({ ...wheelOpts });
@@ -93,41 +94,33 @@ export class TrafficCar {
 
         // Start with a road-snapped waypoint
         this.waypoint = nearestRoadPoint(position.x, position.z);
-        this.lastPos.set(position.x, position.y, position.z);
+        this.lastPos.set(position.x, position.y + 1.0, position.z);
     }
 
     private buildModel(color: number): THREE.Group {
         const g = new THREE.Group();
-        const paint = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.6 });
-        const glass = new THREE.MeshStandardMaterial({ color: 0x001122, transparent: true, opacity: 0.6 });
-        const hlMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffcc, emissiveIntensity: 3 });
-        const tlMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 1.5 });
+        const paint = new THREE.MeshLambertMaterial({ color });
+        const glass = new THREE.MeshLambertMaterial({ color: 0x223344, transparent: true, opacity: 0.5 });
+        const hlMat = new THREE.MeshBasicMaterial({ color: 0xffffcc });
+        const tlMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
 
         const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.5, 4.0), paint);
-        body.castShadow = true;
+        body.castShadow = false;
         g.add(body);
 
         const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.42, 1.9), glass);
         cabin.position.set(0, 0.46, -0.1);
         g.add(cabin);
 
-        const roof = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.05, 1.92), paint);
-        roof.position.set(0, 0.68, -0.1);
-        g.add(roof);
-
         const hlL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.12, 0.06), hlMat);
         hlL.position.set(-0.55, 0.06, 2.03);
         g.add(hlL);
-        const hlR = hlL.clone();
-        hlR.position.set(0.55, 0.06, 2.03);
-        g.add(hlR);
+        const hlR = hlL.clone(); hlR.position.set(0.55, 0.06, 2.03); g.add(hlR);
 
         const tlL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.12, 0.06), tlMat);
         tlL.position.set(-0.55, 0.06, -2.03);
         g.add(tlL);
-        const tlR = tlL.clone();
-        tlR.position.set(0.55, 0.06, -2.03);
-        g.add(tlR);
+        const tlR = tlL.clone(); tlR.position.set(0.55, 0.06, -2.03); g.add(tlR);
 
         return g;
     }
@@ -135,17 +128,11 @@ export class TrafficCar {
     private buildWheel(): THREE.Group {
         const g = new THREE.Group();
         const tire = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.35, 0.35, 0.28, 16),
-            new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1.0 })
+            new THREE.CylinderGeometry(0.35, 0.35, 0.28, 8), // 8 segments instead of 16
+            new THREE.MeshLambertMaterial({ color: 0x111111 })
         );
         tire.rotation.z = Math.PI / 2;
         g.add(tire);
-        const rim = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.22, 0.22, 0.3, 8),
-            new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8 })
-        );
-        rim.rotation.z = Math.PI / 2;
-        g.add(rim);
         return g;
     }
 
