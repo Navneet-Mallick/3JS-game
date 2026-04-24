@@ -88,7 +88,29 @@ export class Sound {
         this.engineOsc.start();
 
         this.engineGain.gain.setTargetAtTime(0.18, this.ctx.currentTime, 0.3);
+    }
+
+    public stopEngine() {
+        if (!this.engineOsc || !this.ctx) return;
+        try {
+            this.engineOsc.stop();
+        } catch {
+            // Already stopped
+        }
+        this.engineOsc = null;
+        this.engineGain = null;
+    }
+
+    public updateEngine(speed: number, throttle: boolean) {
+        if (!this.engineOsc || !this.engineGain || !this.ctx) return;
         
+        // Vary frequency based on speed
+        const freq = 60 + speed * 20;
+        this.engineOsc.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.1);
+        
+        // Vary gain based on throttle
+        const targetGain = throttle ? 0.25 : 0.12;
+        this.engineGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.2);
     }
 
     public playFootstep(dt: number, sprinting: boolean) {
