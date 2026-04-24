@@ -15,6 +15,8 @@ import { TouchControls } from './TouchControls';
 import { Pedestrian }    from './Pedestrian';
 import { WantedLevel }   from './WantedLevel';
 import { CrimeSystem }   from './CrimeSystem';
+import { CheatSystem }   from './CheatSystem';
+import { Bomb }          from './Bomb';
 
 const _dp = new THREE.Vector3();
 
@@ -31,6 +33,8 @@ export class Core {
     private sound:       Sound;
     private wantedLevel: WantedLevel;
     private crimeSystem: CrimeSystem;
+    private cheatSystem: CheatSystem;
+    private bombs: Bomb[] = [];
 
     private lastTime        = 0;
     private playerInVehicle = false;
@@ -105,6 +109,15 @@ export class Core {
 
             this.crimeSystem = new CrimeSystem(this.wantedLevel);
 
+            this.cheatSystem = new CheatSystem(
+                this.player,
+                this.vehicle,
+                this.wantedLevel,
+                this.sound,
+                this.scene.getScene(),
+                this.physics.getWorld()
+            );
+
             const pedSpawns: [number, number, number][] = [
                 [10, 0, 10], [-10, 0, 10], [10, 0, -10], [-10, 0, -10],
                 [20, 0, 0],  [-20, 0, 0],
@@ -141,6 +154,8 @@ export class Core {
 
             document.addEventListener('keydown', (e) => {
                 if (e.key.toLowerCase() === 'm') this.sound.toggleMute();
+                // Pass all keys to cheat system
+                this.cheatSystem.handleKeyPress(e.key);
             });
 
             this.init();
@@ -298,6 +313,18 @@ export class Core {
             this.wantedLevel.clearWantedLevel();
         }
 
+        // Handle bomb throwing (press B)
+        if (Input.isKeyPressed('b') && !this.playerInVehicle) {
+            const playerPos = this.player.getPosition();
+            const bombPos = new THREE.Vector3(playerPos.x, playerPos.y + 1, playerPos.z);
+            this.bombs.push(new Bomb(
+                this.scene.getScene(),
+                this.physics.getWorld(),
+                bombPos
+            ));
+            this.sound.playExplosion();
+        }
+
         if (this.paused) {
             Input.clearPerFrameData();
             return;
@@ -396,6 +423,13 @@ export class Core {
             const near = _dp.lengthSq() < 3600; // 60²
             p.mesh.visible = near;
             if (near) p.update(dt, playerPos);
+        }
+
+        // Update bombs
+        for (let i = this.bombs.length - 1; i >= 0; i--) {
+            if (this.bombs[i].update(dt, this.scene.getScene(), this.physics.getWorld())) {
+                this.bombs.splice(i, 1);
+            }
         }
 
         this.handlePickups(now);
