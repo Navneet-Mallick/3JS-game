@@ -54,9 +54,10 @@ export class Vehicle {
         const chassisShape = new CANNON.Box(new CANNON.Vec3(1.0, 0.3, 2.2));
         this.chassisBody = new CANNON.Body({ mass: 1200, shape: chassisShape });
         this.chassisBody.position.set(position.x, position.y + 1.2, position.z);
-        this.chassisBody.linearDamping  = 0.02;  // Reduced for better responsiveness
-        this.chassisBody.angularDamping = 0.3;   // Reduced for better turning
-        this.chassisBody.allowSleep = false;  // Prevent sleeping which can cause stuck vehicles
+        this.chassisBody.linearDamping  = 0.01;  // Very low damping for better responsiveness
+        this.chassisBody.angularDamping = 0.2;   // Lower for better turning
+        this.chassisBody.allowSleep = false;     // Prevent sleeping which can cause stuck vehicles
+        this.chassisBody.sleepSpeedLimit = 0.1;  // Very low threshold
         world.addBody(this.chassisBody);
 
         this.chassisMesh = this.buildCarModel();
@@ -72,16 +73,16 @@ export class Vehicle {
         const wheelOpts = {
             radius:                         0.38,
             directionLocal:                 new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness:            30,   // Balanced stiffness
-            suspensionRestLength:           0.35, // Standard rest length
-            frictionSlip:                   2.8,  // Better grip
-            dampingRelaxation:              2.0,  // Smoother response
-            dampingCompression:             4.0,  // Better compression
-            maxSuspensionForce:             120000, // More responsive
+            suspensionStiffness:            40,   // Increased for better response
+            suspensionRestLength:           0.3,  // Slightly lower for better ground contact
+            frictionSlip:                   3.5,  // Higher grip for better control
+            dampingRelaxation:              2.3,  // Better response
+            dampingCompression:             4.4,  // Better compression
+            maxSuspensionForce:             150000, // Higher force for responsiveness
             rollInfluence:                  0.01,
             axleLocal:                      new CANNON.Vec3(1, 0, 0),
             chassisConnectionPointLocal:    new CANNON.Vec3(1, 1, 0),
-            maxSuspensionTravel:            0.4,  // Good travel range
+            maxSuspensionTravel:            0.3,  // Tighter travel for better control
             customSlidingFrictionWheelStep: 1,
         };
 
@@ -168,9 +169,9 @@ export class Vehicle {
         }
 
         const gearRatio    = this.GEAR_RATIOS[this.gear] ?? 1;
-        const ENGINE_FORCE = 1200 * gearRatio * this.speedBoostMultiplier;
-        const BRAKE_FORCE  = 60;
-        const MAX_STEER    = Math.max(0.25, 0.6 - spd * 0.005);  // More responsive steering
+        const ENGINE_FORCE = 1500 * gearRatio * this.speedBoostMultiplier; // Increased from 1200
+        const BRAKE_FORCE  = 80;  // Increased from 60
+        const MAX_STEER    = Math.max(0.3, 0.65 - spd * 0.004);  // More responsive steering at all speeds
 
         let force = 0, steer = 0, brake = 0;
         let handbrake = false, throttle = false;
@@ -208,8 +209,8 @@ export class Vehicle {
             .sub(_carFwd.multiplyScalar(_vel.dot(_carFwd)))
             .length();
 
-        // Smooth steering - faster response
-        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 8 * dt);
+        // Smooth steering - faster response for better control
+        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 12 * dt);
 
         this.vehicle.applyEngineForce(force, 2);
         this.vehicle.applyEngineForce(force, 3);

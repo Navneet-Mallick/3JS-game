@@ -353,9 +353,17 @@ export class Player {
         this.playerInVehicle = inVehicle;
         if (inVehicle) {
             this.mesh.visible = false;  // hide Tommy
+            // Stop all player movement when entering vehicle
+            this.body.velocity.set(0, 0, 0);
+            this.body.angularVelocity.set(0, 0, 0);
         } else {
             this.mesh.visible = true;   // show Tommy
             this.visible      = true;
+            // Reset player velocity when exiting vehicle
+            this.body.velocity.set(0, 0, 0);
+            this.body.angularVelocity.set(0, 0, 0);
+            this.onGround = false;
+            this.groundTimer = 0;
         }
     }
 

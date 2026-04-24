@@ -207,13 +207,15 @@ export class Core {
         if (this.playerInVehicle) {
             // EXIT
             this.playerInVehicle = false;
-            this.player.setInVehicle(false);   // shows Tommy, restores camera
+            
+            // Spawn Tommy beside the car BEFORE setting vehicle state
+            const vp = this.vehicle.getPosition();
+            this.player.setPosition(vp.x + 2.5, vp.y + 1.5, vp.z);
+            
+            // Now update states
+            this.player.setInVehicle(false);   // shows Tommy, restores camera, resets velocity
             this.vehicle.isOccupied = false;
             this.vehicle.setVisible(true);
-
-            // Spawn Tommy beside the car
-            const vp = this.vehicle.getPosition();
-            this.player.setPosition(vp.x + 2.5, vp.y + 1, vp.z);
 
             if (this.modeBadge) {
                 this.modeBadge.textContent = 'ON FOOT';
@@ -230,7 +232,7 @@ export class Core {
 
             if (_dp.lengthSq() < 25) {
                 this.playerInVehicle = true;
-                this.player.setInVehicle(true);    // hides Tommy, stops player camera
+                this.player.setInVehicle(true);    // hides Tommy, stops player camera, resets velocity
                 this.vehicle.isOccupied = true;    // vehicle now controls camera
                 this.vehicle.setVisible(true);
 
