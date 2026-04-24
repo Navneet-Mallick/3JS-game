@@ -258,6 +258,12 @@ export class Core {
         // Handle F key even when paused
         this.handleEnterExit();
 
+        // Handle R key to reset stuck vehicle
+        if (Input.isKeyPressed('r') && this.playerInVehicle) {
+            this.vehicle.resetPosition();
+            this.player.setPosition(5, 1, 0);
+        }
+
         if (this.paused) {
             Input.clearPerFrameData();
             return;

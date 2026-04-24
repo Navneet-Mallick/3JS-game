@@ -56,6 +56,7 @@ export class Vehicle {
         this.chassisBody.position.set(position.x, position.y + 1.2, position.z);
         this.chassisBody.linearDamping  = 0.05;
         this.chassisBody.angularDamping = 0.6;
+        this.chassisBody.allowSleep = false;  // Prevent sleeping which can cause stuck vehicles
         world.addBody(this.chassisBody);
 
         this.chassisMesh = this.buildCarModel();
@@ -71,16 +72,16 @@ export class Vehicle {
         const wheelOpts = {
             radius:                         0.38,
             directionLocal:                 new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness:            35,
-            suspensionRestLength:           0.35,
+            suspensionStiffness:            25,  // Reduced from 35 for better off-road compliance
+            suspensionRestLength:           0.4,  // Increased from 0.35 for more travel
             frictionSlip:                   2.5,
             dampingRelaxation:              2.3,
             dampingCompression:             4.4,
-            maxSuspensionForce:             80000,
+            maxSuspensionForce:             100000,  // Increased from 80000 for better grip
             rollInfluence:                  0.01,
             axleLocal:                      new CANNON.Vec3(1, 0, 0),
             chassisConnectionPointLocal:    new CANNON.Vec3(1, 1, 0),
-            maxSuspensionTravel:            0.3,
+            maxSuspensionTravel:            0.5,  // Increased from 0.3 for more suspension travel
             customSlidingFrictionWheelStep: 1,
         };
 
@@ -238,6 +239,25 @@ export class Vehicle {
             this.wheelMeshes[i].position.copy(t.position as unknown as THREE.Vector3);
             this.wheelMeshes[i].quaternion.copy(t.quaternion as unknown as THREE.Quaternion);
         }
+
+        // SAFETY: Prevent vehicle from falling through world or getting stuck
+        // If vehicle is too far below ground, reset it
+        if (this.chassisBody.position.y < -50) {
+            this.resetPosition();
+        }
+
+        // Prevent extreme rotations that can cause physics instability
+        const rot = this.chassisBody.quaternion;
+        if (Math.abs(rot.x) > 1 || Math.abs(rot.y) > 1 || Math.abs(rot.z) > 1 || Math.abs(rot.w) > 1) {
+            this.chassisBody.quaternion.normalize();
+        }
+    }
+
+    public resetPosition() {
+        this.chassisBody.position.set(5, 1.2, 0);
+        this.chassisBody.velocity.set(0, 0, 0);
+        this.chassisBody.angularVelocity.set(0, 0, 0);
+        this.currentSteeringValue = 0;
     }
 
     private updateCamera(dt: number) {
