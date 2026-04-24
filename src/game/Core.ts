@@ -637,6 +637,17 @@ export class Core {
             if (_dp.lengthSq() < 16900) t.update(dt); // 130²
         }
 
+        // Pedestrian LOD
+        for (let i = 0; i < this.pedestrians.length; i++) {
+            const p = this.pedestrians[i];
+            _dp.set(
+                p.getPosition().x - playerPos.x,
+                0,
+                p.getPosition().z - playerPos.z
+            );
+            if (_dp.lengthSq() < 10000) p.update(dt, playerPos); // 100²
+        }
+
         // Police update
         this.wantedLevel.update(dt);
         this.crimeSystem.update(dt);
