@@ -4,6 +4,8 @@ import { Player } from './Player';
 import { Vehicle } from './Vehicle';
 import { WantedLevel } from './WantedLevel';
 import { Sound } from './Sound';
+import { MusicSystem } from './MusicSystem';
+import { WeaponSystem, WeaponType } from './WeaponSystem';
 
 export class CheatSystem {
     private player: Player;
@@ -12,6 +14,8 @@ export class CheatSystem {
     private sound: Sound;
     private scene: THREE.Scene;
     private world: CANNON.World;
+    private musicSystem: MusicSystem;
+    private weaponSystem: WeaponSystem;
 
     private cheatBuffer: string = '';
     private readonly CHEATS: { [key: string]: () => void } = {
@@ -24,6 +28,13 @@ export class CheatSystem {
         'CHASESTAT': () => this.maxWantedCheat(),
         'WEAPONSFORALL': () => this.weaponsCheat(),
         'BOMBSAWAY': () => this.bombsCheat(),
+        'GUNRUNNER': () => this.switchToPistol(),
+        'SHOTGUNNER': () => this.switchToShotgun(),
+        'RIFLEMAN': () => this.switchToRifle(),
+        'MINIGUNNER': () => this.switchToMinigun(),
+        'MUSICDEMON': () => this.playDemonsMusic(),
+        'MUSICEAGLES': () => this.playEaglesMusic(),
+        'MUSICKEEPERS': () => this.playKeepersMusic(),
     };
 
     constructor(
@@ -32,7 +43,9 @@ export class CheatSystem {
         wantedLevel: WantedLevel,
         sound: Sound,
         scene: THREE.Scene,
-        world: CANNON.World
+        world: CANNON.World,
+        musicSystem: MusicSystem,
+        weaponSystem: WeaponSystem
     ) {
         this.player = player;
         this.vehicle = vehicle;
@@ -40,6 +53,8 @@ export class CheatSystem {
         this.sound = sound;
         this.scene = scene;
         this.world = world;
+        this.musicSystem = musicSystem;
+        this.weaponSystem = weaponSystem;
     }
 
     public handleKeyPress(key: string) {
@@ -191,5 +206,44 @@ export class CheatSystem {
                 notification.style.opacity = '0';
             }, 2000);
         }
+    }
+
+    private switchToPistol() {
+        this.weaponSystem.switchWeapon(WeaponType.PISTOL);
+        this.weaponSystem.fullAmmo();
+        this.sound.playReload();
+    }
+
+    private switchToShotgun() {
+        this.weaponSystem.switchWeapon(WeaponType.SHOTGUN);
+        this.weaponSystem.fullAmmo();
+        this.sound.playReload();
+    }
+
+    private switchToRifle() {
+        this.weaponSystem.switchWeapon(WeaponType.RIFLE);
+        this.weaponSystem.fullAmmo();
+        this.sound.playReload();
+    }
+
+    private switchToMinigun() {
+        this.weaponSystem.switchWeapon(WeaponType.MINIGUN);
+        this.weaponSystem.fullAmmo();
+        this.sound.playReload();
+    }
+
+    private playDemonsMusic() {
+        this.musicSystem.playTrack('demons');
+        this.sound.playCollect();
+    }
+
+    private playEaglesMusic() {
+        this.musicSystem.playTrack('eagles');
+        this.sound.playCollect();
+    }
+
+    private playKeepersMusic() {
+        this.musicSystem.playTrack('keepers');
+        this.sound.playCollect();
     }
 }

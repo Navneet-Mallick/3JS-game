@@ -17,6 +17,8 @@ import { WantedLevel }   from './WantedLevel';
 import { CrimeSystem }   from './CrimeSystem';
 import { CheatSystem }   from './CheatSystem';
 import { Bomb }          from './Bomb';
+import { MusicSystem }   from './MusicSystem';
+import { WeaponSystem }  from './WeaponSystem';
 
 const _dp = new THREE.Vector3();
 
@@ -35,6 +37,8 @@ export class Core {
     private crimeSystem: CrimeSystem;
     private cheatSystem: CheatSystem;
     private bombs: Bomb[] = [];
+    private musicSystem: MusicSystem;
+    private weaponSystem: WeaponSystem;
 
     private lastTime        = 0;
     private playerInVehicle = false;
@@ -109,14 +113,23 @@ export class Core {
 
             this.crimeSystem = new CrimeSystem(this.wantedLevel);
 
+            this.musicSystem = new MusicSystem();
+            this.weaponSystem = new WeaponSystem(this.sound);
+
             this.cheatSystem = new CheatSystem(
                 this.player,
                 this.vehicle,
                 this.wantedLevel,
                 this.sound,
                 this.scene.getScene(),
-                this.physics.getWorld()
+                this.physics.getWorld(),
+                this.musicSystem,
+                this.weaponSystem
             );
+
+            // Start with a random track
+            const tracks = ['demons', 'eagles', 'keepers'];
+            this.musicSystem.playTrack(tracks[Math.floor(Math.random() * tracks.length)]);
 
             const pedSpawns: [number, number, number][] = [
                 [10, 0, 10], [-10, 0, 10], [10, 0, -10], [-10, 0, -10],
