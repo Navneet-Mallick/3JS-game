@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Input } from './Input';
 import { GamepadInput } from './Gamepad';
@@ -40,6 +40,8 @@ export class Vehicle {
     private currentSteeringValue = 0;
     private speedBoostTimer      = 0;
     private speedBoostMultiplier = 1;
+    // Stuck detection: counts seconds player is throttling but speed < 3 km/h
+    private stuckTimer = 0;
 
     constructor(
         scene:    THREE.Scene,
@@ -156,6 +158,13 @@ export class Vehicle {
         return g;
     }
 
+    // Allow Core to pre-seed camera direction on vehicle entry
+    public initCamera(yaw: number, pitch: number) {
+        this.camYaw   = yaw;
+        this.camPitch = Math.max(0.05, Math.min(0.6, pitch));
+        this.mouseIdleTimer = 0;
+    }
+
     public update(dt: number) {
         // Always update physics sync first
         this.chassisMesh.position.copy(
@@ -223,19 +232,20 @@ export class Vehicle {
             this.sound.updateEngine(spd * 0.5, throttle);
             this.updateCamera(dt);
         } else {
-            // When not occupied, apply strong brake
-            brake = 30;
+            // When not occupied, apply a light brake so the car doesn't drift
+            brake = 8;
             force = 0;
             this.taillightMats.forEach(m => m.emissive.setHex(0x220000));
         }
 
         // Lateral speed for drift detection
+        // FIX: clone _vel before the multiplyScalar mutation so the result is correct
         _carFwd.set(0, 0, 1).applyQuaternion(
             this.chassisBody.quaternion as unknown as THREE.Quaternion
         );
         _vel.set(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
         this.lateralSpeed = _vel.clone()
-            .sub(_carFwd.multiplyScalar(_vel.dot(_carFwd)))
+            .sub(_carFwd.clone().multiplyScalar(_vel.dot(_carFwd)))
             .length();
 
         // Smooth steering
@@ -256,16 +266,34 @@ export class Vehicle {
             for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i);
         }
 
-        // SAFETY: Prevent vehicle from falling through world
-        if (this.chassisBody.position.y < -10) {
-            this.resetPosition();
+        // ── Soft Y-floor ─────────────────────────────────────────────────────
+        // Replaces the old hard teleport clamp. Gently lifts the chassis when
+        // it sinks below the minimum ride height (suspension fully compressed).
+        // This restores wheel-ground contact without the hill-jitter of a hard snap.
+        if (this.chassisBody.position.y < 0.55) {
+            this.chassisBody.position.y += (0.55 - this.chassisBody.position.y) * 0.3;
+            if (this.chassisBody.velocity.y < 0) this.chassisBody.velocity.y = 0;
         }
-        
-        // Keep vehicle upright if flipped
-        if (this.chassisBody.position.y < 0.5) {
-            this.chassisBody.position.y = 1.2;
-            this.chassisBody.velocity.y = 0;
+
+        // ── Stuck detection ──────────────────────────────────────────────────
+        // If the player has been holding throttle but the car isn't moving,
+        // it is physics-stuck (wedged against geometry or pinned by gravity).
+        // After 1.5 s we fire a small upward impulse to break it free.
+        if (this.isOccupied && throttle && spd < 3) {
+            this.stuckTimer += dt;
+            if (this.stuckTimer > 1.5) {
+                this.chassisBody.applyImpulse(
+                    new CANNON.Vec3(0, 1800, 0),
+                    new CANNON.Vec3(0, 0, 0)
+                );
+                this.stuckTimer = 0;
+            }
+        } else {
+            this.stuckTimer = 0;
         }
+
+        // Wake up every frame while occupied — defeats world-level allowSleep
+        if (this.isOccupied) this.chassisBody.wakeUp();
     }
 
     public resetPosition() {
@@ -311,7 +339,9 @@ export class Vehicle {
             _camTarget.z + dynDist * Math.cos(this.camYaw) * Math.cos(this.camPitch)
         );
 
-        const lerpT = Math.min(0.2, 0.1 + this.getSpeedKmh() * 0.002);
+        // FIX: normalize lerp factor by frame time so camera speed is the same at any Hz
+        const baseLerp = Math.min(0.18, 0.08 + this.getSpeedKmh() * 0.002);
+        const lerpT    = 1 - Math.pow(1 - baseLerp, 60 * dt);
         this.camera.position.lerp(_camPos, lerpT);
         this.camera.lookAt(_camTarget);
     }

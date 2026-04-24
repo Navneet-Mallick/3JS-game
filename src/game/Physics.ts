@@ -9,8 +9,12 @@ export class Physics {
 
     constructor() {
         this.world = new CANNON.World({ gravity: new CANNON.Vec3(0, -15, 0) });
-        this.world.broadphase = new CANNON.SAPBroadphase(this.world);
-        this.world.allowSleep = true;
+        // FIX: SAPBroadphase silently stops detecting collisions at large world coordinates
+        // (~±200 units) which causes vehicles and the player to fall through the ground.
+        // NaiveBroadphase is O(n²) but 100% reliable at any coordinate scale.
+        // With < 100 physics bodies in this scene it is still fast enough.
+        this.world.broadphase = new CANNON.NaiveBroadphase();
+        this.world.allowSleep = false; // FIX: prevent bodies sleeping mid-game causing freeze
 
         this.groundMaterial = new CANNON.Material('ground');
         this.wheelMaterial  = new CANNON.Material('wheel');

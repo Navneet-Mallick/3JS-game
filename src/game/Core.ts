@@ -49,6 +49,7 @@ export class Core {
     private playerInVehicle = false;
     private currentVehicle: 'car' | 'bike' | null = null; // Track which vehicle
     private paused          = false;
+    private enterExitCooldown = 0; // FIX: debounce enter/exit so rapid F-presses can't corrupt state
 
     private modeBadge   = document.getElementById('mode-badge');
     private speedoEl    = document.getElementById('speedo-value');
@@ -370,29 +371,40 @@ export class Core {
     }
 
     // ── Enter / Exit vehicle ──────────────────────────────────────────────────
-    private handleEnterExit() {
+    // FIX: renamed to accept dt so the cooldown can be decremented in the game loop
+    private handleEnterExit(dt: number = 0) {
+        // Debounce: ignore rapid presses within 0.3 seconds
+        if (this.enterExitCooldown > 0) return;
+
         const pressed = Input.isKeyPressed('f') ||
             (GamepadInput.connected && GamepadInput.btnXPressed()) ||
             TouchControls.enterPressed;
         if (!pressed) return;
+
+        // Arm cooldown immediately
+        this.enterExitCooldown = 0.30;
 
         if (this.playerInVehicle) {
             // ═══ EXIT VEHICLE ═══
             this.playerInVehicle = false;
             
             const currentVehicle = this.currentVehicle === 'bike' ? this.bike : this.vehicle;
-            const vp = currentVehicle.getPosition();
             const vBody = currentVehicle.chassisBody;
             
-            // Calculate safe exit position
+            // FIX: use physics body position (accurate) not mesh position (may lag one frame)
+            const exitX = vBody.position.x;
+            const exitY = vBody.position.y; // accurate world Y regardless of slope
+            const exitZ = vBody.position.z;
+
+            // Calculate safe exit position offset in world space
             const exitOffset = new THREE.Vector3(3, 0, 0);
             exitOffset.applyQuaternion(vBody.quaternion as unknown as THREE.Quaternion);
             
-            // Set player position FIRST
+            // Set player position: same horizontal offset, 1.5 units above body center
             this.player.setPosition(
-                vp.x + exitOffset.x, 
-                vp.y + 2, 
-                vp.z + exitOffset.z
+                exitX + exitOffset.x,
+                exitY + 1.5,
+                exitZ + exitOffset.z
             );
             
             // Update states
@@ -414,7 +426,7 @@ export class Core {
             // ═══ ENTER VEHICLE ═══
             const pp = this.player.getPosition();
             
-            // Check car first
+            // Check car first (within 5 units = sq 25)
             const vp = this.vehicle.getPosition();
             _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
 
@@ -423,7 +435,7 @@ export class Core {
                 return;
             }
             
-            // Check bike
+            // Check bike (within 5 units)
             const bp = this.bike.getPosition();
             _dp.set(pp.x - bp.x, pp.y - bp.y, pp.z - bp.z);
 
@@ -442,6 +454,10 @@ export class Core {
         
         // Wake up vehicle physics
         vehicle.chassisBody.wakeUp();
+        
+        // FIX: seed the vehicle camera from the player's current yaw/pitch so there is
+        //      no jarring snap when the camera transitions from player to vehicle view.
+        vehicle.initCamera(this.player.getYaw() + Math.PI, 0.28);
         
         // Update states
         this.player.setInVehicle(true);
@@ -521,13 +537,29 @@ export class Core {
     private animate(time: number) {
         requestAnimationFrame((t) => this.animate(t));
 
-        // Handle F key even when paused
-        this.handleEnterExit();
+        // FIX: compute dt at the very top so every code path below can use it safely
+        const dt  = Math.min(0.05, (time - this.lastTime) / 1000);
+        const now = time;
+        this.lastTime = time;
 
-        // Handle R key to reset stuck vehicle
+        // Tick the enter/exit cooldown (needs dt, must be before handleEnterExit)
+        if (this.enterExitCooldown > 0) this.enterExitCooldown -= dt;
+
+        // FIX: enter/exit only fires when NOT paused, and is debounced by the cooldown
+        if (!this.paused) {
+            this.handleEnterExit(dt);
+        }
+
+        // Handle R key to reset stuck vehicle — FIX: branch on currentVehicle
         if (Input.isKeyPressed('r') && this.playerInVehicle) {
-            this.vehicle.resetPosition();
-            this.player.setPosition(5, 1, 0);
+            if (this.currentVehicle === 'bike') {
+                this.bike.resetPosition();
+            } else {
+                this.vehicle.resetPosition();
+            }
+            // Move player alongside the reset vehicle
+            const rv = this.currentVehicle === 'bike' ? this.bike : this.vehicle;
+            this.player.setPosition(rv.getPosition().x + 3, rv.getPosition().y + 2, rv.getPosition().z);
         }
 
         // Handle wanted level cheat (press G to gain wanted level)
@@ -559,10 +591,6 @@ export class Core {
 
         GamepadInput.poll();
 
-        const dt  = Math.min(0.05, (time - this.lastTime) / 1000);
-        const now = time;
-        this.lastTime = time;
-
         this.physics.update(dt);
 
         // ── KEY FIX: player and vehicle are mutually exclusive ──
@@ -573,6 +601,25 @@ export class Core {
         // Update both vehicles
         this.vehicle.update(dt);
         this.bike.update(dt);
+
+        // ── World boundary clamp ─────────────────────────────────────────────
+        // Safety net: if anything escapes the city bounds (±230 units) send it
+        // back to spawn. This catches edge cases where the broadphase fix above
+        // isn't enough (e.g. very high speed launches over the city edge).
+        const WORLD_LIMIT = 230;
+        if (this.playerInVehicle) {
+            const cv = this.currentVehicle === 'bike' ? this.bike : this.vehicle;
+            const cp = cv.chassisBody.position;
+            if (Math.abs(cp.x) > WORLD_LIMIT || Math.abs(cp.z) > WORLD_LIMIT) {
+                cv.resetPosition();
+                this.player.setPosition(5, 2, 3);
+            }
+        } else {
+            const pp = this.player.body.position;
+            if (Math.abs(pp.x) > WORLD_LIMIT || Math.abs(pp.z) > WORLD_LIMIT) {
+                this.player.setPosition(0, 2, 0);
+            }
+        }
 
         // Reference position for LOD and UI
         const playerPos = this.playerInVehicle
@@ -687,13 +734,19 @@ export class Core {
         if (healthBar) healthBar.style.width = `${this.player.health}%`;
         if (armorBar) armorBar.style.width = `${this.player.armor}%`;
 
-        // Enter prompt
+        // FIX: unified proximity threshold — 5 units (sq 25) matches the enter check in handleEnterExit()
         if (this.enterPrompt) {
             if (!this.playerInVehicle) {
                 const pp = this.player.getPosition();
                 const vp = this.vehicle.getPosition();
                 _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
-                this.enterPrompt.style.display = _dp.lengthSq() < 36 ? 'flex' : 'none';
+                const nearCar  = _dp.lengthSq() < 25;
+
+                const bp = this.bike.getPosition();
+                _dp.set(pp.x - bp.x, pp.y - bp.y, pp.z - bp.z);
+                const nearBike = _dp.lengthSq() < 25;
+
+                this.enterPrompt.style.display = (nearCar || nearBike) ? 'flex' : 'none';
             } else {
                 this.enterPrompt.style.display = 'none';
             }

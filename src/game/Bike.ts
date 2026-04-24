@@ -32,6 +32,8 @@ export class Bike {
     private currentSteeringValue = 0;
     private speedBoostTimer      = 0;
     private speedBoostMultiplier = 1;
+    // Stuck detection: counts seconds player is throttling but speed < 3 km/h
+    private stuckTimer = 0;
 
     constructor(
         scene:    THREE.Scene,
@@ -154,6 +156,13 @@ export class Bike {
         return g;
     }
 
+    // Allow Core to pre-seed camera direction on vehicle entry
+    public initCamera(yaw: number, pitch: number) {
+        this.camYaw   = yaw;
+        this.camPitch = Math.max(0.05, Math.min(0.6, pitch));
+        this.mouseIdleTimer = 0;
+    }
+
     public update(dt: number) {
         // Always update physics sync first
         this.chassisMesh.position.copy(
@@ -211,18 +220,19 @@ export class Bike {
             this.sound.updateEngine(spd * 0.7, throttle); // Higher pitch for bike
             this.updateCamera(dt);
         } else {
-            // When not occupied, apply strong brake
-            brake = 40;
+            // When not occupied, apply a light brake so the bike doesn't drift
+            brake = 10;
             force = 0;
         }
 
         // Lateral speed for drift detection
+        // FIX: clone before multiplyScalar so _bikeFwd isn't mutated for downstream use
         _bikeFwd.set(0, 0, 1).applyQuaternion(
             this.chassisBody.quaternion as unknown as THREE.Quaternion
         );
         _vel.set(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
         this.lateralSpeed = _vel.clone()
-            .sub(_bikeFwd.multiplyScalar(_vel.dot(_bikeFwd)))
+            .sub(_bikeFwd.clone().multiplyScalar(_vel.dot(_bikeFwd)))
             .length();
 
         // Faster steering response for bike
@@ -239,16 +249,37 @@ export class Bike {
             for (let i = 0; i < 2; i++) this.vehicle.setBrake(brake, i);
         }
 
-        // SAFETY: Prevent bike from falling through world
-        if (this.chassisBody.position.y < -10) {
+        // FIX: Fall-through safety — only teleport if truly underground
+        if (this.chassisBody.position.y < -8) {
             this.resetPosition();
+            return;
         }
-        
-        // Keep bike upright if fallen
-        if (this.chassisBody.position.y < 0.5) {
-            this.chassisBody.position.y = 1.0;
-            this.chassisBody.velocity.y = 0;
+
+        // ── Soft Y-floor ─────────────────────────────────────────────────────
+        // Gently lifts the chassis when it sinks below suspension range,
+        // restoring wheel-ground contact without the old teleport jitter.
+        if (this.chassisBody.position.y < 0.4) {
+            this.chassisBody.position.y += (0.4 - this.chassisBody.position.y) * 0.3;
+            if (this.chassisBody.velocity.y < 0) this.chassisBody.velocity.y = 0;
         }
+
+        // ── Stuck detection ──────────────────────────────────────────────────
+        // Upward impulse after 1.5 s of throttle with no speed gain.
+        if (this.isOccupied && throttle && spd < 3) {
+            this.stuckTimer += dt;
+            if (this.stuckTimer > 1.5) {
+                this.chassisBody.applyImpulse(
+                    new CANNON.Vec3(0, 800, 0),
+                    new CANNON.Vec3(0, 0, 0)
+                );
+                this.stuckTimer = 0;
+            }
+        } else {
+            this.stuckTimer = 0;
+        }
+
+        // Wake up every frame while occupied — defeats world-level allowSleep
+        if (this.isOccupied) this.chassisBody.wakeUp();
     }
 
     public resetPosition() {
@@ -294,7 +325,9 @@ export class Bike {
             _camTarget.z + dynDist * Math.cos(this.camYaw) * Math.cos(this.camPitch)
         );
 
-        const lerpT = Math.min(0.25, 0.15 + this.getSpeedKmh() * 0.003);
+        // FIX: normalize lerp factor by frame time so camera speed is the same at any Hz
+        const baseLerp = Math.min(0.22, 0.12 + this.getSpeedKmh() * 0.003);
+        const lerpT    = 1 - Math.pow(1 - baseLerp, 60 * dt);
         this.camera.position.lerp(_camPos, lerpT);
         this.camera.lookAt(_camTarget);
     }
