@@ -132,19 +132,21 @@ export class CheatSystem {
     }
 
     private invisibilityCheat() {
-        (this.player as any).invisible = true;
-        setTimeout(() => {
-            (this.player as any).invisible = false;
-        }, 30000); // 30 seconds
+        // FIX: Player uses 'visible' not 'invisible'
+        this.player.visible = false;
         this.sound.playPowerUp();
+        setTimeout(() => {
+            this.player.visible = true;
+        }, 30000);
     }
 
     private superJumpCheat() {
-        (this.player as any).jumpPower = 3.0; // Triple jump power
-        setTimeout(() => {
-            (this.player as any).jumpPower = 1.0;
-        }, 30000); // 30 seconds
+        // FIX: Player uses 'jumpForce' not 'jumpPower'
+        (this.player as any).jumpForce = 22;
         this.sound.playPowerUp();
+        setTimeout(() => {
+            (this.player as any).jumpForce = 7;
+        }, 20000);
     }
 
     private maxWantedCheat() {

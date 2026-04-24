@@ -716,15 +716,17 @@ export class Core {
             this.wantedStars.textContent = level > 0 ? '★'.repeat(level) : '';
         }
 
-        // Weapon display (only on foot)
-        if (!this.playerInVehicle && this.weaponDisplay && this.ammoDisplay) {
-            const weaponStats = this.weaponSystem.getWeaponStats();
-            const ammo = this.weaponSystem.getAmmo();
-            this.weaponDisplay.textContent = weaponStats.name.toUpperCase();
-            if (ammo === -1) {
-                this.ammoDisplay.textContent = '∞';
-            } else {
-                this.ammoDisplay.textContent = String(ammo);
+        // Weapon display — show on foot, hide in vehicle
+        const weaponInfoPanel = document.getElementById('weapon-info');
+        if (this.playerInVehicle) {
+            if (weaponInfoPanel) weaponInfoPanel.style.display = 'none';
+        } else {
+            if (weaponInfoPanel) weaponInfoPanel.style.display = 'block';
+            if (this.weaponDisplay && this.ammoDisplay) {
+                const weaponStats = this.weaponSystem.getWeaponStats();
+                const ammo = this.weaponSystem.getAmmo();
+                this.weaponDisplay.textContent = weaponStats.name.toUpperCase();
+                this.ammoDisplay.textContent = ammo === -1 ? '\u221e' : String(ammo);
             }
         }
         
