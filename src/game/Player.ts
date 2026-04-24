@@ -3,17 +3,29 @@ import * as CANNON from 'cannon-es';
 import { Input } from './Input';
 import { Weapon } from './Weapon';
 
+// Pre-allocated — zero per-frame heap allocations
+const _fwdVec    = new THREE.Vector3();
+const _rightVec  = new THREE.Vector3();
+const _dir       = new THREE.Vector3();
+const _camTarget = new THREE.Vector3();
+const _camPos    = new THREE.Vector3();
+const _lookDir   = new THREE.Vector3();
+const _headPos   = new THREE.Vector3();
+const _weaponPos = new THREE.Vector3();
+const _weaponQ   = new THREE.Quaternion();
+const _euler     = new THREE.Euler();
+
 export class Player {
-    private scene: THREE.Scene;
-    public body: CANNON.Body;
+    private scene:  THREE.Scene;
+    public  body:   CANNON.Body;
     private camera: THREE.PerspectiveCamera;
 
-    public mesh: THREE.Group;
+    public mesh:   THREE.Group;
     public visible = true;
 
-    private moveSpeed   = 7;
-    private sprintSpeed = 14;
-    private jumpForce   = 9;
+    private moveSpeed   = 6;
+    private sprintSpeed = 11;
+    private jumpForce   = 7;
     private onGround    = false;
     private groundTimer = 0;
 
@@ -26,206 +38,228 @@ export class Player {
 
     // Camera
     private yaw   = 0;
-    private pitch = 0.22;
+    private pitch = 0.38;
     private readonly ORBIT_DIST = 8;
-    private readonly MIN_PITCH  = -0.15;
-    private readonly MAX_PITCH  = 0.55;
+    private readonly MIN_PITCH  = 0.1;
+    private readonly MAX_PITCH  = 0.7;
     private firstPerson = false;
+
     private weapon: Weapon;
-    private health = 100;
-    private armor = 0;
     private playerInVehicle = false;
 
-    constructor(scene: THREE.Scene, world: CANNON.World, camera: THREE.PerspectiveCamera, playerMaterial?: CANNON.Material) {
+    // Cheat system
+    private cheatBuffer  = '';
+    private cheatTimeout = 0;
+    public  health      = 100;
+    public  armor       = 0;
+    public  wantedLevel = 0;
+
+    // Callback wired by Core
+    public onSpeedBoost: (() => void) | null = null;
+
+    constructor(
+        scene:  THREE.Scene,
+        world:  CANNON.World,
+        camera: THREE.PerspectiveCamera,
+        playerMaterial?: CANNON.Material
+    ) {
         this.scene  = scene;
         this.camera = camera;
-
-        this.mesh = this.buildModel();
+        this.mesh   = this.buildModel();
         this.scene.add(this.mesh);
 
         this.body = new CANNON.Body({
-            mass: 80,
-            shape: new CANNON.Sphere(0.5), // Larger collision radius
-            position: new CANNON.Vec3(0, 3, 0), // Start higher for visibility
-            fixedRotation: true,
-            linearDamping: 0.85,
-            angularDamping: 1.0,
-            material: playerMaterial || undefined
+            mass: 80, shape: new CANNON.Sphere(0.5),
+            position: new CANNON.Vec3(0, 2, 0),
+            fixedRotation: true, linearDamping: 0.92, angularDamping: 1.0,
+            material: playerMaterial,
         });
         world.addBody(this.body);
 
         this.weapon = new Weapon(scene, world, camera);
+        this.body.addEventListener('collide', () => { this.onGround = true; this.groundTimer = 0.15; });
+        this.camera.position.set(0, 5, this.ORBIT_DIST);
+        this.camera.lookAt(0, 1, 0);
 
-        this.body.addEventListener('collide', () => {
-            this.onGround  = true;
-            this.groundTimer = 0.12;
-        });
-
-        // Init camera position
-        const py = 3 + 1.4 + this.ORBIT_DIST * Math.sin(this.pitch);
-        const pz = this.ORBIT_DIST * Math.cos(this.pitch);
-        this.camera.position.set(0, py, pz);
-        this.camera.lookAt(0, 3 + 1.4, 0);
+        window.addEventListener('keydown', (e) => this.handleCheat(e.key));
     }
 
+    // ── Tommy Vercetti model ──────────────────────────────────────────────────
     private buildModel(): THREE.Group {
         const g = new THREE.Group();
 
-        // GTA-style character materials
-        const skin   = new THREE.MeshStandardMaterial({ color: 0xf4c2a1, roughness: 0.8 });
-        const hair   = new THREE.MeshStandardMaterial({ color: 0x2c1810, roughness: 0.9 });
-        const shirt  = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.7 });
-        const jeans  = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
-        const shoes  = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.6 });
-        const leather = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.7 });
+        const skin   = new THREE.MeshLambertMaterial({ color: 0xc8845a });
+        const hair   = new THREE.MeshLambertMaterial({ color: 0x120a00 });
+        const shirt  = new THREE.MeshLambertMaterial({ color: 0x2ab8b0 });
+        const shirtD = new THREE.MeshLambertMaterial({ color: 0x1e8a84 });
+        const pants  = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+        const shoes  = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
+        const eyeM   = new THREE.MeshLambertMaterial({ color: 0x050505 });
+        const browM  = new THREE.MeshLambertMaterial({ color: 0x1a0a00 });
+        const pearl  = new THREE.MeshLambertMaterial({ color: 0xf0ece0 });
 
-        // Head (larger, more visible)
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.4), skin);
-        head.position.y = 1.8;
-        head.castShadow = true;
-        g.add(head);
+        const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x=0, y=0, z=0) => {
+            const m = new THREE.Mesh(geo, mat);
+            m.position.set(x, y, z);
+            g.add(m);
+            return m;
+        };
 
-        // Hair
-        const hairMesh = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.15, 0.42), hair);
-        hairMesh.position.y = 2.1;
-        g.add(hairMesh);
+        // HEAD
+        add(new THREE.BoxGeometry(0.38, 0.42, 0.36), skin,  0, 1.76, 0);
+        add(new THREE.BoxGeometry(0.34, 0.12, 0.34), skin,  0, 1.56, 0);
+        add(new THREE.BoxGeometry(0.36, 0.10, 0.34), skin,  0, 1.94, 0);
 
-        // Torso (larger, more prominent)
-        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.3), shirt);
-        torso.position.y = 1.3;
+        // HAIR
+        add(new THREE.BoxGeometry(0.38, 0.05, 0.32), hair,  0,      2.00, -0.01);
+        add(new THREE.BoxGeometry(0.36, 0.18, 0.06), hair,  0,      1.92, -0.17);
+        add(new THREE.BoxGeometry(0.05, 0.30, 0.30), hair, -0.185,  1.88,  0);
+        add(new THREE.BoxGeometry(0.05, 0.30, 0.30), hair,  0.185,  1.88,  0);
+        add(new THREE.BoxGeometry(0.20, 0.04, 0.06), hair,  0,      1.98,  0.16);
+
+        // FACE
+        add(new THREE.BoxGeometry(0.14, 0.04, 0.05), browM, -0.10, 1.84, 0.18);
+        add(new THREE.BoxGeometry(0.14, 0.04, 0.05), browM,  0.10, 1.84, 0.18);
+        add(new THREE.BoxGeometry(0.08, 0.055, 0.04), eyeM, -0.10, 1.77, 0.18);
+        add(new THREE.BoxGeometry(0.08, 0.055, 0.04), eyeM,  0.10, 1.77, 0.18);
+        add(new THREE.BoxGeometry(0.06, 0.10, 0.06), skin,   0,    1.70, 0.18);
+        add(new THREE.BoxGeometry(0.12, 0.025, 0.04), browM,  0,   1.62, 0.18);
+        add(new THREE.BoxGeometry(0.04, 0.10, 0.08), skin,  -0.20, 1.74, 0);
+        add(new THREE.BoxGeometry(0.04, 0.10, 0.08), skin,   0.20, 1.74, 0);
+
+        // NECK
+        add(new THREE.BoxGeometry(0.20, 0.18, 0.20), skin, 0, 1.48, 0);
+
+        // PEARL NECKLACE
+        for (let i = 0; i < 8; i++) {
+            const a  = (i / 8) * Math.PI;
+            const nx = Math.sin(a - Math.PI / 2) * 0.12;
+            const nz = Math.cos(a - Math.PI / 2) * 0.10 + 0.05;
+            add(new THREE.BoxGeometry(0.04, 0.04, 0.04), pearl, nx, 1.42, nz);
+        }
+
+        // TORSO — teal hawaiian shirt
+        const torso = add(new THREE.BoxGeometry(0.60, 0.72, 0.30), shirt, 0, 1.16, 0);
         torso.castShadow = true;
-        g.add(torso);
+        add(new THREE.BoxGeometry(0.06, 0.70, 0.30), shirtD, -0.30, 1.16, 0);
+        add(new THREE.BoxGeometry(0.06, 0.70, 0.30), shirtD,  0.30, 1.16, 0);
+        add(new THREE.BoxGeometry(0.16, 0.22, 0.32), skin,    0,    1.44, 0);
+        add(new THREE.BoxGeometry(0.12, 0.20, 0.32), shirtD, -0.14, 1.44, 0);
+        add(new THREE.BoxGeometry(0.12, 0.20, 0.32), shirtD,  0.14, 1.44, 0);
+        add(new THREE.BoxGeometry(0.03, 0.50, 0.32), shirtD,  0,    1.10, 0);
 
-        // Arms (longer, more visible)
-        this.leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), shirt);
-        this.leftArm.position.set(-0.4, 1.4, 0);
-        this.leftArm.castShadow = true;
-        g.add(this.leftArm);
+        // ARMS — short sleeves
+        this.leftArm  = add(new THREE.BoxGeometry(0.17, 0.30, 0.17), shirt, -0.40, 1.38, 0) as THREE.Mesh;
+        this.rightArm = add(new THREE.BoxGeometry(0.17, 0.30, 0.17), shirt,  0.40, 1.38, 0) as THREE.Mesh;
+        add(new THREE.BoxGeometry(0.15, 0.32, 0.15), skin, -0.40, 1.08, 0);
+        add(new THREE.BoxGeometry(0.15, 0.32, 0.15), skin,  0.40, 1.08, 0);
+        add(new THREE.BoxGeometry(0.14, 0.14, 0.14), skin, -0.40, 0.88, 0);
+        add(new THREE.BoxGeometry(0.14, 0.14, 0.14), skin,  0.40, 0.88, 0);
 
-        this.rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), shirt);
-        this.rightArm.position.set(0.4, 1.4, 0);
-        this.rightArm.castShadow = true;
-        g.add(this.rightArm);
+        // BELT
+        add(new THREE.BoxGeometry(0.60, 0.07, 0.31),
+            new THREE.MeshLambertMaterial({ color: 0x111111 }), 0, 0.82, 0);
+        add(new THREE.BoxGeometry(0.10, 0.07, 0.06),
+            new THREE.MeshLambertMaterial({ color: 0x888844, emissive: new THREE.Color(0x444422) }), 0, 0.82, 0.16);
 
-        // Hands
-        const leftHand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), skin);
-        leftHand.position.set(-0.4, 0.9, 0);
-        g.add(leftHand);
+        // LEGS
+        this.leftLeg  = add(new THREE.BoxGeometry(0.21, 0.72, 0.21), pants, -0.15, 0.42, 0) as THREE.Mesh;
+        this.rightLeg = add(new THREE.BoxGeometry(0.21, 0.72, 0.21), pants,  0.15, 0.42, 0) as THREE.Mesh;
 
-        const rightHand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), skin);
-        rightHand.position.set(0.4, 0.9, 0);
-        g.add(rightHand);
-
-        // Legs (longer, more realistic)
-        this.leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.22), jeans);
-        this.leftLeg.position.set(-0.15, 0.4, 0);
-        this.leftLeg.castShadow = true;
-        g.add(this.leftLeg);
-
-        this.rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.22), jeans);
-        this.rightLeg.position.set(0.15, 0.4, 0);
-        this.rightLeg.castShadow = true;
-        g.add(this.rightLeg);
-
-        // Shoes (larger, more visible)
-        const leftShoe = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.15, 0.35), shoes);
-        leftShoe.position.set(-0.15, 0.05, 0.05);
-        g.add(leftShoe);
-
-        const rightShoe = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.15, 0.35), shoes);
-        rightShoe.position.set(0.15, 0.05, 0.05);
-        g.add(rightShoe);
-
-        // Add a distinctive jacket/vest
-        const vest = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.6, 0.25), leather);
-        vest.position.y = 1.4;
-        vest.castShadow = true;
-        g.add(vest);
-
-        // Add some detail - belt
-        const belt = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.05, 0.32), leather);
-        belt.position.y = 0.9;
-        g.add(belt);
-
-        // Make character more visible with emissive elements
-        const glowMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x00ff00, 
-            emissive: 0x00ff00, 
-            emissiveIntensity: 0.3 
-        });
-        
-        // Add glowing armband for visibility
-        const armband = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.2), glowMaterial);
-        armband.position.set(0.4, 1.2, 0);
-        g.add(armband);
-
-        // Add a glowing outline around the character
-        const outlineMaterial = new THREE.MeshBasicMaterial({ 
-            color: 0x00ff00, 
-            transparent: true, 
-            opacity: 0.3,
-            side: THREE.BackSide
-        });
-        
-        // Create outline meshes for main body parts
-        const headOutline = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.52, 0.42), outlineMaterial);
-        headOutline.position.copy(head.position);
-        g.add(headOutline);
-
-        const torsoOutline = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.82, 0.32), outlineMaterial);
-        torsoOutline.position.copy(torso.position);
-        g.add(torsoOutline);
+        // SHOES
+        add(new THREE.BoxGeometry(0.22, 0.10, 0.32), shoes, -0.15, 0.05, 0.04);
+        add(new THREE.BoxGeometry(0.22, 0.10, 0.32), shoes,  0.15, 0.05, 0.04);
 
         return g;
     }
 
+    // ── Cheat codes ───────────────────────────────────────────────────────────
+    private readonly CHEATS: Record<string, () => void> = {
+        'ASPIRINE':           () => { this.health = 100;        this.showCheat('HEALTH RESTORED'); },
+        'PRECIOUSPROTECTION': () => { this.armor  = 100;        this.showCheat('ARMOR ADDED'); },
+        'BIGBANG':            () => { this.speedBoost();        this.showCheat('SPEED BOOST!'); },
+        'LEAVEMEALONE':       () => { this.wantedLevel = 0;     this.showCheat('WANTED CLEARED'); },
+        'CANTSEEME':          () => {
+            this.moveSpeed = 14;
+            setTimeout(() => this.moveSpeed = 6, 30000);
+            this.showCheat('SUPER SPEED 30s');
+        },
+        'YOUWONTTAKEMEALIVE': () => {
+            this.jumpForce = 18;
+            setTimeout(() => this.jumpForce = 7, 20000);
+            this.showCheat('SUPER JUMP 20s');
+        },
+    };
+
+    private speedBoost() {
+        if (this.onSpeedBoost) this.onSpeedBoost();
+    }
+
+    private handleCheat(key: string) {
+        if (key.length !== 1) return;
+        this.cheatBuffer += key.toUpperCase();
+        if (this.cheatBuffer.length > 20) this.cheatBuffer = this.cheatBuffer.slice(-20);
+        for (const code of Object.keys(this.CHEATS)) {
+            if (this.cheatBuffer.endsWith(code)) {
+                this.CHEATS[code]();
+                this.cheatBuffer = '';
+                return;
+            }
+        }
+    }
+
+    private showCheat(msg: string) {
+        const el = document.getElementById('cheat-text');
+        if (!el) return;
+        el.textContent   = msg;
+        el.style.opacity = '1';
+        clearTimeout(this.cheatTimeout);
+        this.cheatTimeout = window.setTimeout(() => { el.style.opacity = '0'; }, 3000);
+    }
+
+    // ── Update ────────────────────────────────────────────────────────────────
     public update(dt: number) {
+        // ── KEY FIX: when in vehicle, do absolutely nothing ──
+        if (this.playerInVehicle) return;
+
         if (!this.visible) { this.mesh.visible = false; return; }
         this.mesh.visible = true;
 
         // Mouse look
-        if (Input.isPointerLocked) {
-            this.yaw   -= Input.movementX * 0.0022;
-            this.pitch -= Input.movementY * 0.0022;
-            this.pitch  = Math.max(this.MIN_PITCH, Math.min(this.MAX_PITCH, this.pitch));
-        }
+        this.yaw   -= Input.movementX * 0.0025;
+        this.pitch -= Input.movementY * 0.0025;
+        this.pitch  = Math.max(this.MIN_PITCH, Math.min(this.MAX_PITCH, this.pitch));
 
-        // Toggle first-person with V
         if (Input.isKeyPressed('v')) this.firstPerson = !this.firstPerson;
 
-        const ix = (Input.isKeyDown('d') ? 1 : 0) - (Input.isKeyDown('a') ? 1 : 0);
-        const iz = (Input.isKeyDown('s') ? 1 : 0) - (Input.isKeyDown('w') ? 1 : 0);
+        const ix = ((Input.isKeyDown('d') || Input.isKeyDown('arrowright')) ? 1 : 0)
+                 - ((Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  ? 1 : 0);
+        const iz = ((Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  ? 1 : 0)
+                 - ((Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    ? 1 : 0);
         const sprinting = Input.isKeyDown('shift');
 
-        const fwd   = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
-        const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-        const dir   = new THREE.Vector3().addScaledVector(fwd, iz).addScaledVector(right, ix);
-        const moving = dir.lengthSq() > 0;
+        _fwdVec.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+        _rightVec.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+        _dir.set(0, 0, 0).addScaledVector(_fwdVec, iz).addScaledVector(_rightVec, ix);
+
+        const moving = _dir.lengthSq() > 0;
         const speed  = sprinting ? this.sprintSpeed : this.moveSpeed;
 
         if (moving) {
-            dir.normalize();
-            // Apply velocity directly with less damping for better movement
-            this.body.velocity.x = dir.x * speed;
-            this.body.velocity.z = dir.z * speed;
-            
-            // Keep player from falling too fast
-            if (this.body.velocity.y < -10) {
-                this.body.velocity.y = -10;
-            }
-
-            const targetY = Math.atan2(dir.x, dir.z);
+            _dir.normalize();
+            this.body.velocity.x = _dir.x * speed;
+            this.body.velocity.z = _dir.z * speed;
+            const targetY = Math.atan2(_dir.x, _dir.z);
             let diff = targetY - this.mesh.rotation.y;
             while (diff >  Math.PI) diff -= Math.PI * 2;
             while (diff < -Math.PI) diff += Math.PI * 2;
-            this.mesh.rotation.y += diff * Math.min(1, 18 * dt);
+            this.mesh.rotation.y += diff * Math.min(1, 14 * dt);
         } else {
-            // Stop horizontal movement when not moving
-            this.body.velocity.x *= 0.8;
-            this.body.velocity.z *= 0.8;
+            this.body.velocity.x *= 0.7;
+            this.body.velocity.z *= 0.7;
         }
 
-        // Simple ground detection - if player is too low, push them up
+        // Ground clamp
         if (this.body.position.y < 1.5) {
             this.body.position.y = 1.5;
             this.body.velocity.y = 0;
@@ -236,56 +270,38 @@ export class Player {
         // Jump
         if (Input.isKeyDown(' ') && this.onGround) {
             this.body.velocity.y = this.jumpForce;
-            this.onGround  = false;
+            this.onGround    = false;
             this.groundTimer = 0;
         }
-
-        if (this.groundTimer > 0) { 
-            this.groundTimer -= dt; 
-            if (this.groundTimer <= 0) {
-                this.onGround = false;
-            }
+        if (this.groundTimer > 0) {
+            this.groundTimer -= dt;
+            if (this.groundTimer <= 0) this.onGround = false;
         }
 
-        // Sync mesh with physics body
+        // Sync mesh to physics
         this.mesh.position.set(
             this.body.position.x,
-            this.body.position.y - 0.5, // Adjust for larger collision sphere
+            this.body.position.y - 1.0,
             this.body.position.z
         );
-        
-        // Make character always face camera direction when moving
-        if (moving) {
-            this.mesh.rotation.y = this.yaw;
-        }
 
-        // Update weapon
-        const cameraPos = new THREE.Vector3(
-            this.body.position.x,
-            this.body.position.y + 1.4,
-            this.body.position.z
-        );
-        const cameraQuat = new THREE.Quaternion();
-        cameraQuat.setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0));
-        
-        this.weapon.updatePosition(cameraPos, cameraQuat);
-        this.weapon.setVisible(!this.playerInVehicle);
-        
-        const weaponFired = this.weapon.update(dt, cameraPos, cameraQuat);
-        if (weaponFired) {
-            // Add crime for shooting
-            // This will be handled by the Core class
-        }
+        // Weapon
+        _weaponPos.set(this.body.position.x, this.body.position.y + 0.3, this.body.position.z);
+        _euler.set(this.pitch, this.yaw, 0);
+        _weaponQ.setFromEuler(_euler);
+        this.weapon.updatePosition(_weaponPos, _weaponQ);
+        this.weapon.setVisible(true);
+        this.weapon.update(dt, _weaponPos, _weaponQ);
 
-        // Walk animation + camera bob
+        // Walk animation
         if (moving) {
-            this.animTime += dt * (sprinting ? 18 : 11);
-            this.bobTime  += dt * (sprinting ? 18 : 11);
-            const s = Math.sin(this.animTime) * 0.6;
+            this.animTime += dt * (sprinting ? 16 : 10);
+            this.bobTime  += dt * (sprinting ? 16 : 10);
+            const s = Math.sin(this.animTime) * 0.5;
             this.leftLeg.rotation.x  =  s;
             this.rightLeg.rotation.x = -s;
-            this.leftArm.rotation.x  = -s * 0.7;
-            this.rightArm.rotation.x =  s * 0.7;
+            this.leftArm.rotation.x  = -s * 0.5;
+            this.rightArm.rotation.x =  s * 0.5;
         } else {
             this.animTime = 0;
             this.bobTime  = 0;
@@ -296,71 +312,70 @@ export class Player {
             this.rightArm.rotation.x = THREE.MathUtils.lerp(this.rightArm.rotation.x, 0, t);
         }
 
-        this.updateCamera(moving, sprinting, dt);
+        this.updateCamera(moving, sprinting);
     }
 
-    private updateCamera(moving: boolean, sprinting: boolean, _dt: number) {
-        const bob = moving ? Math.sin(this.bobTime * 0.5) * (sprinting ? 0.06 : 0.03) : 0;
-
-        const headPos = new THREE.Vector3(
-            this.mesh.position.x,
-            this.mesh.position.y + 1.72,
-            this.mesh.position.z
-        );
+    // ── Camera ────────────────────────────────────────────────────────────────
+    private updateCamera(moving: boolean, sprinting: boolean) {
+        const bob = moving
+            ? Math.sin(this.bobTime * 0.5) * (sprinting ? 0.04 : 0.02)
+            : 0;
 
         if (this.firstPerson) {
-            // First-person: camera sits at head, looks where mouse points
-            this.camera.position.copy(headPos);
-            const lookDir = new THREE.Vector3(
+            _headPos.set(
+                this.mesh.position.x,
+                this.mesh.position.y + 1.72,
+                this.mesh.position.z
+            );
+            this.camera.position.copy(_headPos);
+            _lookDir.set(
                 Math.sin(this.yaw) * Math.cos(this.pitch),
                 Math.sin(-this.pitch),
                 Math.cos(this.yaw) * Math.cos(this.pitch)
             );
-            this.camera.lookAt(headPos.clone().add(lookDir));
-            // Hide mesh in first person
+            _headPos.add(_lookDir);
+            this.camera.lookAt(_headPos);
             this.mesh.visible = false;
             return;
         }
 
         this.mesh.visible = true;
-        const target = new THREE.Vector3(
+        _camTarget.set(
             this.mesh.position.x,
-            this.mesh.position.y + 1.4 + bob,
+            this.mesh.position.y + 0.9 + bob,
             this.mesh.position.z
         );
-
-        const cx = target.x + this.ORBIT_DIST * Math.sin(this.yaw) * Math.cos(this.pitch);
-        const cy = target.y + this.ORBIT_DIST * Math.sin(this.pitch);
-        const cz = target.z + this.ORBIT_DIST * Math.cos(this.yaw) * Math.cos(this.pitch);
-
-        const lerpSpeed = sprinting ? 0.18 : 0.14;
-        this.camera.position.lerp(new THREE.Vector3(cx, cy, cz), lerpSpeed);
-        this.camera.lookAt(target);
+        _camPos.set(
+            _camTarget.x + this.ORBIT_DIST * Math.sin(this.yaw) * Math.cos(this.pitch),
+            _camTarget.y + this.ORBIT_DIST * Math.sin(this.pitch),
+            _camTarget.z + this.ORBIT_DIST * Math.cos(this.yaw) * Math.cos(this.pitch)
+        );
+        this.camera.position.lerp(_camPos, sprinting ? 0.18 : 0.12);
+        this.camera.lookAt(_camTarget);
     }
 
+    // ── Public API ────────────────────────────────────────────────────────────
     public getPosition() { return this.mesh.position; }
 
     public setPosition(x: number, y: number, z: number) {
         this.body.position.set(x, y, z);
         this.body.velocity.set(0, 0, 0);
-        this.mesh.position.set(x, y - 0.4, z);
+        this.mesh.position.set(x, y - 1.0, z);
     }
 
+    // ── KEY FIX: properly hand off control to vehicle ────────────────────────
     public setInVehicle(inVehicle: boolean) {
         this.playerInVehicle = inVehicle;
-        this.visible = !inVehicle;
-    }
-
-    public getHealth(): number { return this.health; }
-    public getArmor(): number { return this.armor; }
-    public takeDamage(damage: number) {
-        if (this.armor > 0) {
-            const armorDamage = Math.min(damage, this.armor);
-            this.armor -= armorDamage;
-            damage -= armorDamage;
+        if (inVehicle) {
+            this.mesh.visible = false;  // hide Tommy
+            this.weapon.setVisible(false);
+        } else {
+            this.mesh.visible = true;   // show Tommy
+            this.visible      = true;
+            this.weapon.setVisible(true);
         }
-        this.health -= damage;
     }
 
+    public getYaw()          { return this.yaw; }
     public getWeapon(): Weapon { return this.weapon; }
 }

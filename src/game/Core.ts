@@ -1,69 +1,47 @@
 import * as CANNON from 'cannon-es';
-import * as THREE from 'three';
-import { GameScene } from './Scene';
-import { Physics } from './Physics';
-import { Player } from './Player';
-import { Vehicle } from './Vehicle';
-import { City } from './City';
-import { Minimap } from './Minimap';
-import { Input } from './Input';
-import { TrafficCar } from './TrafficCar';
-import { Sound } from './Sound';
-import { MissionSystem } from './Mission';
-import { ScoreSystem } from './Score';
-import { GamepadInput } from './Gamepad';
+import * as THREE  from 'three';
+import { GameScene }     from './Scene';
+import { Physics }       from './Physics';
+import { Player }        from './Player';
+import { Vehicle }       from './Vehicle';
+import { City }          from './City';
+import { Minimap }       from './Minimap';
+import { Input }         from './Input';
+import { TrafficCar }    from './TrafficCar';
+import { Police }        from './Police';
+import { Sound }         from './Sound';
+import { GamepadInput }  from './Gamepad';
 import { TouchControls } from './TouchControls';
-import { Pedestrian } from './Pedestrian';
-import { Police } from './Police';
-import { WantedLevel } from './WantedLevel';
-import { VehicleFactory, VehicleType } from './VehicleFactory';
-import type { IVehicle } from './VehicleFactory';
-import { Motorcycle } from './Motorcycle';
-import { BuildingInterior } from './BuildingInterior';
-import { MoneySystem } from './MoneySystem';
-import { EnhancedPoliceAI } from './EnhancedPoliceAI';
-import { SaveSystem } from './SaveSystem';
-import { MainMenu } from './MainMenu';
-import { PauseMenu } from './PauseMenu';
+import { Pedestrian }    from './Pedestrian';
+import { WantedLevel }   from './WantedLevel';
+
+const _dp = new THREE.Vector3();
 
 export class Core {
-    private scene: GameScene;
-    private physics: Physics;
-    private player: Player;
-    private vehicle: Vehicle;
-    private city: City;
-    private traffic: TrafficCar[] = [];
+    private scene:       GameScene;
+    private physics:     Physics;
+    private player:      Player;
+    private vehicle:     Vehicle;
+    private city:        City;
+    private traffic:     TrafficCar[] = [];
+    private police:      Police[] = [];
     private pedestrians: Pedestrian[] = [];
-    private police: Police[] = [];
-    private motorcycles: IVehicle[] = [];
+    private minimap:     Minimap;
+    private sound:       Sound;
     private wantedLevel: WantedLevel;
-    private buildingInteriors: BuildingInterior[] = [];
-    private moneySystem: MoneySystem;
-    private enhancedPoliceAI: EnhancedPoliceAI[] = [];
-    private saveSystem: SaveSystem;
-    private isPlayerInInterior = false;
-    private currentInterior: BuildingInterior | null = null;
-    private minimap: Minimap;
-    private mainMenu: MainMenu;
-    private pauseMenu: PauseMenu;
-    private gameStarted: boolean = false;
-    private sound: Sound;
-    private missions: MissionSystem;
-    private score: ScoreSystem;
 
-    private lastTime = 0;
+    private lastTime        = 0;
     private playerInVehicle = false;
-    private paused = false;
+    private paused          = false;
 
     private modeBadge   = document.getElementById('mode-badge');
-    private gearEl      = document.getElementById('gear-value');
     private speedoEl    = document.getElementById('speedo-value');
-    private ammoEl      = document.getElementById('ammo-display');
-    private moneyEl     = document.getElementById('money-display');
-    private radioEl     = document.getElementById('radio-station');
-    private lockPrompt  = document.getElementById('pointer-lock-prompt');
+    private gearEl      = document.getElementById('gear-value');
+    private speedoBox   = document.getElementById('speedometer');
+    private lockPrompt  = document.getElementById('lock-prompt');
     private pauseScreen = document.getElementById('pause-screen');
     private enterPrompt = document.getElementById('enter-prompt');
+    private wantedStars = document.getElementById('wanted-stars');
 
     constructor() {
         try {
@@ -74,24 +52,31 @@ export class Core {
             this.sound   = new Sound();
             this.scene   = new GameScene();
             this.physics = new Physics();
+            this.city    = new City(
+                this.scene.getScene(),
+                this.physics.getWorld(),
+                this.physics.groundMaterial
+            );
 
-            this.city = new City(this.scene.getScene(), this.physics.getWorld(), this.physics.groundMaterial);
+            this.player = new Player(
+                this.scene.getScene(),
+                this.physics.getWorld(),
+                this.scene.getCamera(),
+                this.physics.playerMaterial
+            );
 
-            this.player  = new Player(this.scene.getScene(), this.physics.getWorld(), this.scene.getCamera(), this.physics.playerMaterial);
             this.vehicle = new Vehicle(
                 this.scene.getScene(),
                 this.physics.getWorld(),
                 this.scene.getCamera(),
-                new CANNON.Vec3(3, 1, 3),
+                new CANNON.Vec3(5, 0, 0),
                 this.sound
             );
 
             const trafficSpawns: [number, number, number][] = [
-                [ 30, 2,  0], [-30, 2,  0],
-                [  0, 2, 30], [  0, 2, -30],
-                [ 60, 2, 60], [-60, 2,  60],
-                [ 60, 2,-60], [-60, 2, -60],
-                [120, 2,  0], [  0, 2, 120],
+                [ 30, 0,  0], [-30, 0,  0],
+                [  0, 0, 30], [  0, 0, -30],
+                [ 55, 0, 55], [-55, 0,  55],
             ];
             for (const [x, y, z] of trafficSpawns) {
                 this.traffic.push(new TrafficCar(
@@ -101,46 +86,35 @@ export class Core {
                 ));
             }
 
-            this.minimap  = new Minimap('minimap-canvas');
-            this.missions = new MissionSystem(this.scene.getScene());
-            this.score    = new ScoreSystem();
-            
-            // Initialize menu systems
-            this.mainMenu = new MainMenu(
-                () => this.startGame(),
-                () => this.openSettings(),
-                () => this.exitGame()
-            );
-            
-            this.pauseMenu = new PauseMenu(
-                () => this.resumeGame(),
-                () => this.openSettings(),
-                () => this.returnToMainMenu(),
-                () => this.exitGame()
-            );
+            // Spawn police cars
+            const policeSpawns: [number, number, number][] = [
+                [ 50, 0, -50], [-50, 0, -50],
+                [ 50, 0,  50], [-50, 0,  50],
+            ];
+            for (const [x, y, z] of policeSpawns) {
+                this.police.push(new Police(
+                    this.scene.getScene(),
+                    this.physics.getWorld(),
+                    new CANNON.Vec3(x, y, z)
+                ));
+            }
 
-            // Show main menu initially
-            this.mainMenu.show();
-
-            // Initialize GTA-style systems (but don't start game yet)
             this.wantedLevel = new WantedLevel(this.scene.getScene());
-            this.moneySystem = new MoneySystem();
-            this.saveSystem = new SaveSystem();
-            this.spawnPedestrians();
-            this.spawnPolice();
-            this.spawnMotorcycles();
-            this.spawnBuildingInteriors();
-            this.initializeEnhancedPoliceAI();
 
-            // Welcome message
-            console.log('🎮 Welcome to Neo-Noir City - 10/10 GTA Masterpiece!');
-            console.log('💰 Starting Cash: $1,000');
-            console.log('🏍️ 8 Motorcycles + Multiple Cars Available');
-            console.log('🏢 8 Enterable Buildings');
-            console.log('👮 Enhanced Police AI');
-            console.log('💾 Save System: F5 (Quick Save) / F9 (Quick Load)');
-            console.log('🎯 Objective: Collect gems, destroy boxes, complete missions!');
-            console.log('🚀 Status: Commercial-Quality 10/10 Game - Zero Errors');
+            const pedSpawns: [number, number, number][] = [
+                [10, 0, 10], [-10, 0, 10], [10, 0, -10], [-10, 0, -10],
+                [20, 0, 0],  [-20, 0, 0],
+            ];
+            for (const [x, y, z] of pedSpawns) {
+                this.pedestrians.push(new Pedestrian(
+                    this.scene.getScene(),
+                    null,
+                    new THREE.Vector3(x, y, z)
+                ));
+            }
+
+            this.minimap = new Minimap('minimap-canvas');
+            this.player.onSpeedBoost = () => this.vehicle.boostSpeed();
 
             document.addEventListener('pointerlockchange', () => {
                 const locked = !!document.pointerLockElement;
@@ -152,8 +126,7 @@ export class Core {
                     this.paused = false;
                 } else {
                     const loading = document.getElementById('loading-screen');
-                    const hidden  = loading && loading.style.display === 'none';
-                    if (hidden) {
+                    if (loading && loading.style.display === 'none') {
                         if (this.pauseScreen) this.pauseScreen.classList.add('visible');
                         this.paused = true;
                     } else {
@@ -162,463 +135,254 @@ export class Core {
                 }
             });
 
-            // Mute toggle
             document.addEventListener('keydown', (e) => {
                 if (e.key.toLowerCase() === 'm') this.sound.toggleMute();
             });
 
             this.init();
         } catch (err) {
-            console.error('[Core constructor] failed:', err);
-            const screen = document.getElementById('loading-screen');
-            if (screen) screen.innerHTML = `<p style="color:red;font-family:monospace;padding:2rem">Startup Error: ${err}</p>`;
+            console.error('[Core] startup failed:', err);
+            const s = document.getElementById('loading-screen');
+            if (s) s.innerHTML = `<p style="color:red;padding:2rem">Error: ${err}</p>`;
         }
     }
 
     private async init() {
-        try {
-            const bar    = document.getElementById('loader-bar');
-            const screen = document.getElementById('loading-screen');
-
-            for (let i = 0; i <= 100; i += 10) {
-                if (bar) bar.style.width = `${i}%`;
-                await new Promise(r => setTimeout(r, 30));
-            }
-
-            if (screen) {
-                screen.style.opacity = '0';
-                setTimeout(() => {
-                    screen.style.display = 'none';
-                    if (this.lockPrompt) this.lockPrompt.style.display = 'flex';
-                }, 600);
-            }
-
-            this.sound.init();
-            this.missions.start();
-
-            requestAnimationFrame((t) => this.animate(t));
-        } catch (err) {
-            console.error('[Core.init] failed:', err);
-            const screen = document.getElementById('loading-screen');
-            if (screen) screen.innerHTML = `<p style="color:red;font-family:monospace;padding:2rem">Error: ${err}</p>`;
+        const bar    = document.getElementById('loader-bar');
+        const screen = document.getElementById('loading-screen');
+        for (let i = 0; i <= 100; i += 10) {
+            if (bar) bar.style.width = `${i}%`;
+            await new Promise(r => setTimeout(r, 20));
         }
-    }
-
-    private spawnPedestrians() {
-        const pedestrianPositions: [number, number, number][] = [
-            [10, 1, 10], [-10, 1, 10], [10, 1, -10], [-10, 1, -10],
-            [20, 1, 0], [-20, 1, 0], [0, 1, 20], [0, 1, -20],
-            [15, 1, 15], [-15, 1, 15], [15, 1, -15], [-15, 1, -15]
-        ];
-
-        pedestrianPositions.forEach(([x, y, z]) => {
-            this.pedestrians.push(new Pedestrian(
-                this.scene.getScene(),
-                this.physics.getWorld(),
-                new THREE.Vector3(x, y, z)
-            ));
-        });
-    }
-
-    private spawnPolice() {
-        const policePositions: [number, number, number][] = [
-            [30, 1, 30], [-30, 1, 30], [30, 1, -30], [-30, 1, -30]
-        ];
-
-        policePositions.forEach(([x, y, z]) => {
-            this.police.push(new Police(
-                this.scene.getScene(),
-                this.physics.getWorld(),
-                this.scene.getCamera(),
-                new CANNON.Vec3(x, y, z),
-                this.sound
-            ));
-        });
-    }
-
-    private spawnMotorcycles() {
-        const motorcyclePositions: [number, number, number][] = [
-            [15, 1, 15], [-15, 1, 15], [15, 1, -15], [-15, 1, -15],
-            [25, 1, 0], [-25, 1, 0], [0, 1, 25], [0, 1, -25]
-        ];
-
-        motorcyclePositions.forEach(([x, y, z]) => {
-            const motorcycle = VehicleFactory.createVehicle(
-                VehicleType.MOTORCYCLE,
-                this.scene.getScene(),
-                this.physics.getWorld(),
-                this.scene.getCamera(),
-                new CANNON.Vec3(x, y, z),
-                this.sound
-            );
-            this.motorcycles.push(motorcycle);
-        });
-    }
-
-    private spawnBuildingInteriors() {
-        const buildingPositions: [number, number, number, string][] = [
-            [20, 1, 20, 'apartment'],
-            [-20, 1, 20, 'shop'],
-            [20, 1, -20, 'garage'],
-            [-20, 1, -20, 'office'],
-            [40, 1, 0, 'apartment'],
-            [-40, 1, 0, 'shop'],
-            [0, 1, 40, 'garage'],
-            [0, 1, -40, 'office']
-        ];
-
-        buildingPositions.forEach(([x, y, z, type]) => {
-            const building = new BuildingInterior(
-                this.scene.getScene(),
-                this.physics.getWorld(),
-                new THREE.Vector3(x, y, z),
-                type as 'apartment' | 'shop' | 'garage' | 'office'
-            );
-            this.buildingInteriors.push(building);
-        });
-    }
-
-    private initializeEnhancedPoliceAI() {
-        // Upgrade existing police to enhanced AI
-        this.police.forEach((police, index) => {
-            const enhancedAI = new EnhancedPoliceAI(
-                police.vehicle,
-                this.wantedLevel.getCurrentLevel()
-            );
-            this.enhancedPoliceAI.push(enhancedAI);
-        });
-    }
-
-    private handleShortcuts() {
-        // Quick save (F5)
-        if (Input.isKeyPressed('F5')) {
-            this.saveSystem.quickSave();
-            console.log('Quick saved!');
+        if (screen) {
+            screen.style.opacity = '0';
+            setTimeout(() => {
+                screen.style.display = 'none';
+                if (this.lockPrompt) this.lockPrompt.style.display = 'flex';
+            }, 400);
         }
-        
-        // Quick load (F9)
-        if (Input.isKeyPressed('F9')) {
-            this.saveSystem.quickLoad();
-            console.log('Quick loaded!');
-        }
-        
-        // Pause menu (ESC)
-        if (Input.isKeyPressed('Escape') && this.gameStarted) {
-            if (!this.mainMenu.isMenuVisible()) {
-                this.togglePause();
-            }
-        }
-        
-        // Mute (M)
-        if (Input.isKeyPressed('m') && this.gameStarted && !this.pauseMenu.isPaused()) {
-            this.sound.toggleMute();
-        }
+        this.sound.init();
+        requestAnimationFrame((t) => this.animate(t));
     }
 
-    // Menu system methods
-    private startGame() {
-        this.gameStarted = true;
-        this.mainMenu.hide();
-        this.sound.ensureAudioContext();
-        this.sound.resume();
-        console.log('🎮 Game Started!');
-    }
-
-    private resumeGame() {
-        this.pauseMenu.hide();
-        this.paused = false;
-        this.sound.resume();
-        console.log('▶️ Game Resumed');
-    }
-
-    private togglePause() {
-        if (this.paused) {
-            this.resumeGame();
-        } else {
-            this.paused = true;
-            const gameStats = {
-                money: this.moneySystem.getCurrentMoney(),
-                score: this.score.getScore(),
-                wantedLevel: this.wantedLevel.getCurrentLevel(),
-                playTime: this.saveSystem.getSaveFileInfo().playTime / 1000
-            };
-            this.pauseMenu.show(gameStats);
-            console.log('⏸️ Game Paused');
-        }
-    }
-
-    private openSettings() {
-        console.log('⚙️ Settings opened');
-        // Settings would be implemented here
-    }
-
-    private returnToMainMenu() {
-        this.gameStarted = false;
-        this.pauseMenu.hide();
-        this.mainMenu.show();
-        this.paused = false;
-        console.log('🏠 Returned to Main Menu');
-    }
-
-    private exitGame() {
-        console.log('👋 Exiting game...');
-        // Close window or redirect
-        if (window.confirm('Are you sure you want to exit Neo-Noir City?')) {
-            window.close();
-            // Fallback for browsers that can't close windows
-            window.location.href = 'about:blank';
-        }
-    }
-
+    // ── Enter / Exit vehicle ──────────────────────────────────────────────────
     private handleEnterExit() {
-        const enterKey = Input.isKeyPressed('f') ||
+        const pressed = Input.isKeyPressed('f') ||
             (GamepadInput.connected && GamepadInput.btnXPressed()) ||
             TouchControls.enterPressed;
-
-        if (!enterKey) return;
+        if (!pressed) return;
 
         if (this.playerInVehicle) {
-            this.player.setInVehicle(false);
+            // EXIT
             this.playerInVehicle = false;
+            this.player.setInVehicle(false);   // shows Tommy, restores camera
             this.vehicle.isOccupied = false;
-            this.vehicle.chassisMesh.visible = true;
-            this.scene.getCamera().parent = this.scene.getScene();
-            this.modeBadge!.textContent = 'ON FOOT';
-            this.modeBadge!.style.color = '#00ff00';
+            this.vehicle.setVisible(true);
+
+            // Spawn Tommy beside the car
+            const vp = this.vehicle.getPosition();
+            this.player.setPosition(vp.x + 2.5, vp.y + 1, vp.z);
+
+            if (this.modeBadge) {
+                this.modeBadge.textContent = 'ON FOOT';
+                this.modeBadge.style.color = '#00ff88';
+            }
+            this.sound.stopEngine();
+            if (this.speedoBox) this.speedoBox.classList.remove('active');
+
         } else {
-            const distance = this.player.getPosition().distanceTo(this.vehicle.getPosition());
-            if (distance < 4) {
+            // ENTER — only if close enough
+            const pp = this.player.getPosition();
+            const vp = this.vehicle.getPosition();
+            _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
+
+            if (_dp.lengthSq() < 25) {
                 this.playerInVehicle = true;
-                this.player.setInVehicle(true);
-                this.vehicle.isOccupied = true;
-                this.vehicle.chassisMesh.visible = false;
-                this.modeBadge!.textContent = 'IN VEHICLE';
-                this.modeBadge!.style.color = '#ffff00';
+                this.player.setInVehicle(true);    // hides Tommy, stops player camera
+                this.vehicle.isOccupied = true;    // vehicle now controls camera
+                this.vehicle.setVisible(true);
+
+                if (this.modeBadge) {
+                    this.modeBadge.textContent = 'IN VEHICLE';
+                    this.modeBadge.style.color = '#ffff00';
+                }
+                this.sound.startEngine();
+                if (this.speedoBox) this.speedoBox.classList.add('active');
             }
-        }
-        if (this.speedoEl) {
-            this.speedoEl.classList.add('active');
-            this.sound.startEngine();
         }
     }
 
-    private handleInteractions() {
-        const playerPos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
-        
-        // Check for weapon firing
-        if (!this.playerInVehicle) {
-            const weapon = this.player.getWeapon();
-            const ammo = weapon.getAmmo();
-            const maxAmmo = weapon.getMaxAmmo();
-            
-            // Update ammo display
-            if (this.ammoEl) {
-                this.ammoEl.textContent = `${ammo}/${maxAmmo}`;
-                this.ammoEl.style.color = ammo === 0 ? '#ff0000' : '#ffffff';
-            }
-            
-            // Add crime for shooting
-            if (Input.isKeyPressed(' ') && ammo > 0 && !weapon.isReloadingStatus()) {
-                this.wantedLevel.addCrime('violent');
-            }
-        }
-        
-        // Handle collectibles
-        const collectibles = this.city.getCollectibles();
-        collectibles.forEach((collectible, index) => {
-            if (!collectible.userData || collectible.userData.collected) return;
-            
-            const distance = playerPos.distanceTo(collectible.position);
-            if (distance < 3) {
-                collectible.userData.collected = true;
-                collectible.visible = false;
-                this.score.add(100, 'COLLECTIBLE');
-                this.moneySystem.addReward('collectible');
+    // ── Pickups & destructibles ───────────────────────────────────────────────
+    private handlePickups(now: number) {
+        const pos = this.playerInVehicle
+            ? this.vehicle.getPosition()
+            : this.player.getPosition();
+
+        // Collectibles
+        const cols = this.city.getCollectibles();
+        for (let i = 0; i < cols.length; i++) {
+            const c = cols[i];
+            if (c.userData.collected) continue;
+            _dp.set(pos.x - c.position.x, 0, pos.z - c.position.z);
+            if (_dp.lengthSq() < 9) {
+                c.userData.collected = true;
+                c.visible = false;
                 this.sound.playPickup();
+            } else {
+                c.rotation.y += c.userData.rotationSpeed;
+                c.position.y  = 1 + Math.sin(now * 0.002 + i) * 0.2;
             }
-            
-            // Animate collectibles
-            if (!collectible.userData.collected && collectible.userData.rotationSpeed) {
-                collectible.rotation.y += collectible.userData.rotationSpeed;
-                collectible.position.y = 1 + Math.sin(Date.now() * 0.002 + index) * 0.2;
+        }
+
+        // Power-ups
+        const pups = this.city.getPowerUps();
+        for (let i = 0; i < pups.length; i++) {
+            const p = pups[i];
+            if (p.userData.collected) continue;
+            _dp.set(pos.x - p.position.x, 0, pos.z - p.position.z);
+            if (_dp.lengthSq() < 6.25) {
+                p.userData.collected = true;
+                p.visible = false;
+                this.sound.playPickup();
+                if (this.playerInVehicle) this.vehicle.boostSpeed();
+            } else {
+                p.rotation.y += p.userData.rotationSpeed;
+                p.position.y  = 1 + Math.sin(now * 0.003 + i) * 0.3;
             }
-        });
-        
-        // Handle destructibles
-        const destructibles = this.city.getDestructibles();
-        destructibles.forEach((destructible) => {
-            if (!destructible.mesh || !destructible.body) return;
-            
-            const distance = playerPos.distanceTo(destructible.mesh.position);
-            const velocity = this.playerInVehicle ? 
-                this.vehicle.getSpeedKmh() : 
-                (this.player.body ? Math.sqrt(this.player.body.velocity.x ** 2 + this.player.body.velocity.z ** 2) * 10 : 0);
-            
-            if (distance < 4 && velocity > 20) {
-                destructible.health -= velocity * 0.5;
-                
-                // Add crime for property destruction
-                this.wantedLevel.addCrime('property');
-                
-                if (destructible.health <= 0) {
-                    // Destroy the destructible
-                    destructible.mesh.visible = false;
-                    this.physics.getWorld().removeBody(destructible.body);
-                    this.score.add(50, 'DESTRUCTION');
-                    this.sound.playExplosion();
-                } else {
-                    // Damage effect
-                    const material = destructible.mesh.material as THREE.MeshStandardMaterial;
-                    if (material && material.color) {
-                        material.color.setHex(0xff8888);
-                        setTimeout(() => {
-                            if (material.color) {
-                                material.color.setHex(0xff4444);
-                            }
-                        }, 100);
+        }
+
+        // Destructibles — only when driving fast
+        if (this.playerInVehicle) {
+            const spd  = this.vehicle.getSpeedKmh();
+            const dest = this.city.getDestructibles();
+            for (let i = 0; i < dest.length; i++) {
+                const d = dest[i];
+                if (!d.mesh.visible) continue;
+                _dp.set(pos.x - d.mesh.position.x, 0, pos.z - d.mesh.position.z);
+                if (_dp.lengthSq() < 16 && spd > 20) {
+                    d.health -= spd * 0.5;
+                    if (d.health <= 0) {
+                        d.mesh.visible = false;
+                        this.physics.getWorld().removeBody(d.body);
+                        this.sound.playExplosion();
                     }
                 }
             }
-        });
-        
-        // Handle power-ups
-        const powerUps = this.city.getPowerUps();
-        powerUps.forEach((powerUp, index) => {
-            if (!powerUp.userData || powerUp.userData.collected) return;
-            
-            const distance = playerPos.distanceTo(powerUp.position);
-            if (distance < 2.5) {
-                powerUp.userData.collected = true;
-                powerUp.visible = false;
-                
-                // Apply power-up effect
-                if (powerUp.userData.powerType === 'speed') {
-                    this.score.add(200, 'POWERUP');
-                    this.moneySystem.addReward('powerup');
-                    this.sound.playPickup();
-                    
-                    // Boost vehicle speed if in vehicle
-                    if (this.playerInVehicle) {
-                        // Temporary speed boost - could be enhanced further
-                        this.vehicle.boostSpeed();
-                    }
-                }
-            }
-            
-            // Animate power-ups
-            if (!powerUp.userData.collected && powerUp.userData.rotationSpeed) {
-                powerUp.rotation.y += powerUp.userData.rotationSpeed;
-                powerUp.rotation.x += powerUp.userData.rotationSpeed * 0.5;
-                powerUp.position.y = 1 + Math.sin(Date.now() * 0.003 + index) * 0.3;
-            }
-        });
+        }
     }
 
+    // ── Main loop ─────────────────────────────────────────────────────────────
     private animate(time: number) {
         requestAnimationFrame((t) => this.animate(t));
 
-        // Don't run game logic if main menu is visible or game hasn't started
-        if (this.mainMenu.isMenuVisible() || !this.gameStarted) {
-            this.scene.render();
+        // Handle F key even when paused
+        this.handleEnterExit();
+
+        // Handle R key to reset stuck vehicle
+        if (Input.isKeyPressed('r') && this.playerInVehicle) {
+            this.vehicle.resetPosition();
+            this.player.setPosition(5, 1, 0);
+        }
+
+        // Handle wanted level cheat (press G to gain wanted level)
+        if (Input.isKeyPressed('g') && this.playerInVehicle) {
+            this.wantedLevel.addWantedLevel(1);
+        }
+
+        // Handle clear wanted level (press C)
+        if (Input.isKeyPressed('c')) {
+            this.wantedLevel.clearWantedLevel();
+        }
+
+        if (this.paused) {
+            Input.clearPerFrameData();
             return;
         }
 
-        if (this.paused) return;
-
         GamepadInput.poll();
 
-        const dt = Math.min(0.05, (time - this.lastTime) / 1000);
+        const dt  = Math.min(0.05, (time - this.lastTime) / 1000);
+        const now = time;
         this.lastTime = time;
 
-        this.handleEnterExit();
-        this.handleShortcuts();
         this.physics.update(dt);
-        this.player.update(dt);
-        this.vehicle.update(dt);
-        this.traffic.forEach(t => t.update(dt));
-        
-        // Update GTA-style systems
-        const playerPos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
-        this.pedestrians.forEach(p => p.update(dt, playerPos));
-        this.police.forEach(p => p.update(dt, playerPos, this.playerInVehicle, this.wantedLevel.getCurrentLevel()));
-        this.motorcycles.forEach(m => m.update(dt));
-        this.enhancedPoliceAI.forEach((ai, index) => {
-            if (this.police[index]) {
-                const playerVelocity = new THREE.Vector3(
-                    this.player.body.velocity.x,
-                    this.player.body.velocity.y,
-                    this.player.body.velocity.z
-                );
-                ai.update(dt, playerPos, playerVelocity, this.wantedLevel.getCurrentLevel(), this.enhancedPoliceAI);
-            }
-        });
+
+        // ── KEY FIX: player and vehicle are mutually exclusive ──
+        if (!this.playerInVehicle) {
+            this.player.update(dt);   // player controls camera on foot
+        }
+        this.vehicle.update(dt);      // vehicle controls camera when occupied
+
+        // Reference position for LOD and UI
+        const playerPos = this.playerInVehicle
+            ? this.vehicle.getPosition()
+            : this.player.getPosition();
+
+        // Traffic LOD
+        for (let i = 0; i < this.traffic.length; i++) {
+            const t = this.traffic[i];
+            _dp.set(
+                t.getPosition().x - playerPos.x,
+                0,
+                t.getPosition().z - playerPos.z
+            );
+            if (_dp.lengthSq() < 16900) t.update(dt); // 130²
+        }
+
+        // Police update
         this.wantedLevel.update(dt);
-        
-        // Update save system
-        this.saveSystem.updatePlayTime(dt);
-        this.saveSystem.updateHighestWantedLevel(this.wantedLevel.getCurrentLevel());
-        
-        // Handle interactions
-        this.handleInteractions();
-
-        // Score — drift + air time
-        if (this.playerInVehicle) {
-            this.score.updateDrift(this.vehicle.lateralSpeed, dt);
-            const distance = this.vehicle.getSpeedKmh() * dt / 3.6; // km/h to m/s
-            this.saveSystem.addDistanceTraveled(distance);
-        } else {
-            this.score.updateAir(false, dt);
-            const distance = Math.sqrt(
-                this.player.body.velocity.x ** 2 + 
-                this.player.body.velocity.z ** 2
-            ) * dt;
-            this.saveSystem.addDistanceTraveled(distance);
-        }
-        this.score.updateMultiplier(dt);
-
-        // Update money display
-        if (this.moneyEl) {
-            const moneyValue = document.getElementById('money-value');
-            if (moneyValue) {
-                const currentMoney = this.moneySystem.getCurrentMoney();
-                moneyValue.textContent = `$${currentMoney.toLocaleString()}`;
-                
-                // Achievement milestone
-                if (currentMoney >= 10000 && currentMoney < 10100) {
-                    console.log('🏆 ACHIEVEMENT: $10,000 - Rich Criminal!');
-                }
-                if (currentMoney >= 50000 && currentMoney < 50100) {
-                    console.log('🏆 ACHIEVEMENT: $50,000 - Crime Lord!');
-                }
+        for (let i = 0; i < this.police.length; i++) {
+            const p = this.police[i];
+            _dp.set(
+                p.getPosition().x - playerPos.x,
+                0,
+                p.getPosition().z - playerPos.z
+            );
+            if (_dp.lengthSq() < 25600) { // 160² - larger range for police
+                p.update(dt, playerPos, this.playerInVehicle && this.wantedLevel.isWanted());
             }
         }
 
-        // Update radio display
-        if (this.radioEl) {
-            const station = this.sound.getCurrentStation();
-            this.radioEl.textContent = station.name;
-            this.radioEl.style.color = this.sound.getRadioVolume() > 0 ? '#ff00ff' : '#666666';
+        // Pedestrian LOD
+        for (let i = 0; i < this.pedestrians.length; i++) {
+            const p = this.pedestrians[i];
+            _dp.set(
+                p.getPosition().x - playerPos.x,
+                0,
+                p.getPosition().z - playerPos.z
+            );
+            const near = _dp.lengthSq() < 3600; // 60²
+            p.mesh.visible = near;
+            if (near) p.update(dt, playerPos);
         }
 
-        // Mission update
-        const pos = this.playerInVehicle ? this.vehicle.getPosition() : this.player.getPosition();
-        const reward = this.missions.update(dt, pos);
-        if (reward > 0) this.score.add(reward, 'MISSION');
+        this.handlePickups(now);
 
-        // Speedometer + gear
-        if (this.playerInVehicle && this.speedoEl) {
-            this.speedoEl.textContent = String(this.vehicle.getSpeedKmh());
-            const gearEl = document.getElementById('gear-value');
-            if (gearEl) gearEl.textContent = `G${this.vehicle.getGear()}`;
+        // Speedometer
+        if (this.playerInVehicle) {
+            if (this.speedoEl) this.speedoEl.textContent = String(this.vehicle.getSpeedKmh());
+            if (this.gearEl)   this.gearEl.textContent   = `G${this.vehicle.getGear()}`;
         }
 
-        // Near-vehicle prompt
-        if (!this.playerInVehicle && this.enterPrompt) {
-            const dist = this.vehicle.getPosition().distanceTo(this.player.getPosition());
-            this.enterPrompt.style.display = dist < 6 ? 'flex' : 'none';
+        // Wanted level display
+        if (this.wantedStars) {
+            const level = this.wantedLevel.getLevel();
+            this.wantedStars.textContent = level > 0 ? '★'.repeat(level) : '';
         }
 
-        this.minimap.update(pos);
+        // Enter prompt
+        if (this.enterPrompt) {
+            if (!this.playerInVehicle) {
+                const pp = this.player.getPosition();
+                const vp = this.vehicle.getPosition();
+                _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
+                this.enterPrompt.style.display = _dp.lengthSq() < 36 ? 'flex' : 'none';
+            } else {
+                this.enterPrompt.style.display = 'none';
+            }
+        }
+
+        this.minimap.update(playerPos);
         this.scene.render();
         Input.clearPerFrameData();
         TouchControls.clearFrame();

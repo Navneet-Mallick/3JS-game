@@ -44,12 +44,13 @@ export class Sound {
     }
 
     private startAmbient() {
-        if (!this.ctx || !this.masterGain) return;
+    if (!this.ctx || !this.masterGain) return;
+    
+    try {  // ← ADD THIS
         this.ambientGain = this.ctx.createGain();
         this.ambientGain.gain.value = 0.04;
         this.ambientGain.connect(this.masterGain);
 
-        // Low city rumble
         const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 2, this.ctx.sampleRate);
         const data = buf.getChannelData(0);
         for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
@@ -62,7 +63,10 @@ export class Sound {
         src.connect(filter);
         filter.connect(this.ambientGain);
         src.start();
+    } catch(e) {
+        console.warn('Audio init failed:', e);  // ← won't crash game
     }
+}
 
     public startEngine() {
         if (!this.ctx || !this.masterGain || this.engineOsc) return;
@@ -84,6 +88,7 @@ export class Sound {
         this.engineOsc.start();
 
         this.engineGain.gain.setTargetAtTime(0.18, this.ctx.currentTime, 0.3);
+        
     }
 
     public playFootstep(dt: number, sprinting: boolean) {
