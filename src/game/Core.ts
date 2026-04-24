@@ -4,6 +4,7 @@ import { GameScene }     from './Scene';
 import { Physics }       from './Physics';
 import { Player }        from './Player';
 import { Vehicle }       from './Vehicle';
+import { Bike }          from './Bike';
 import { City }          from './City';
 import { Minimap }       from './Minimap';
 import { Input }         from './Input';
@@ -27,6 +28,7 @@ export class Core {
     private physics:     Physics;
     private player:      Player;
     private vehicle:     Vehicle;
+    private bike:        Bike;
     private city:        City;
     private traffic:     TrafficCar[] = [];
     private police:      Police[] = [];
@@ -45,6 +47,7 @@ export class Core {
 
     private lastTime        = 0;
     private playerInVehicle = false;
+    private currentVehicle: 'car' | 'bike' | null = null; // Track which vehicle
     private paused          = false;
 
     private modeBadge   = document.getElementById('mode-badge');
@@ -85,6 +88,14 @@ export class Core {
                 this.physics.getWorld(),
                 this.scene.getCamera(),
                 new CANNON.Vec3(5, 0, 0),
+                this.sound
+            );
+
+            this.bike = new Bike(
+                this.scene.getScene(),
+                this.physics.getWorld(),
+                this.scene.getCamera(),
+                new CANNON.Vec3(-5, 0, 5),
                 this.sound
             );
 
@@ -369,11 +380,11 @@ export class Core {
             // ═══ EXIT VEHICLE ═══
             this.playerInVehicle = false;
             
-            // Get vehicle position and spawn player beside it
-            const vp = this.vehicle.getPosition();
-            const vBody = this.vehicle.chassisBody;
+            const currentVehicle = this.currentVehicle === 'bike' ? this.bike : this.vehicle;
+            const vp = currentVehicle.getPosition();
+            const vBody = currentVehicle.chassisBody;
             
-            // Calculate safe exit position (to the right of vehicle)
+            // Calculate safe exit position
             const exitOffset = new THREE.Vector3(3, 0, 0);
             exitOffset.applyQuaternion(vBody.quaternion as unknown as THREE.Quaternion);
             
@@ -384,10 +395,11 @@ export class Core {
                 vp.z + exitOffset.z
             );
             
-            // Then update states
+            // Update states
             this.player.setInVehicle(false);
-            this.vehicle.isOccupied = false;
-            this.vehicle.setVisible(true);
+            currentVehicle.isOccupied = false;
+            currentVehicle.setVisible(true);
+            this.currentVehicle = null;
 
             // UI updates
             if (this.modeBadge) {
@@ -401,30 +413,49 @@ export class Core {
         } else {
             // ═══ ENTER VEHICLE ═══
             const pp = this.player.getPosition();
+            
+            // Check car first
             const vp = this.vehicle.getPosition();
             _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
 
             if (_dp.lengthSq() < 25) {
-                this.playerInVehicle = true;
-                
-                // Wake up vehicle physics
-                this.vehicle.chassisBody.wakeUp();
-                
-                // Update states
-                this.player.setInVehicle(true);
-                this.vehicle.isOccupied = true;
-                this.vehicle.setVisible(true);
+                this.enterVehicle('car');
+                return;
+            }
+            
+            // Check bike
+            const bp = this.bike.getPosition();
+            _dp.set(pp.x - bp.x, pp.y - bp.y, pp.z - bp.z);
 
-                // UI updates
-                if (this.modeBadge) {
-                    this.modeBadge.textContent = 'IN VEHICLE';
-                    this.modeBadge.style.color = '#ffff00';
-                }
-                TouchControls.showVehicleControls(true);
-                this.sound.startEngine();
-                if (this.speedoBox) this.speedoBox.classList.add('active');
+            if (_dp.lengthSq() < 25) {
+                this.enterVehicle('bike');
+                return;
             }
         }
+    }
+    
+    private enterVehicle(type: 'car' | 'bike') {
+        this.playerInVehicle = true;
+        this.currentVehicle = type;
+        
+        const vehicle = type === 'bike' ? this.bike : this.vehicle;
+        
+        // Wake up vehicle physics
+        vehicle.chassisBody.wakeUp();
+        
+        // Update states
+        this.player.setInVehicle(true);
+        vehicle.isOccupied = true;
+        vehicle.setVisible(true);
+
+        // UI updates
+        if (this.modeBadge) {
+            this.modeBadge.textContent = type === 'bike' ? 'ON BIKE' : 'IN VEHICLE';
+            this.modeBadge.style.color = '#ffff00';
+        }
+        TouchControls.showVehicleControls(true);
+        this.sound.startEngine();
+        if (this.speedoBox) this.speedoBox.classList.add('active');
     }
 
     // ── Pickups & destructibles ───────────────────────────────────────────────
@@ -538,11 +569,14 @@ export class Core {
         if (!this.playerInVehicle) {
             this.player.update(dt);   // player controls camera on foot
         }
-        this.vehicle.update(dt);      // vehicle controls camera when occupied
+        
+        // Update both vehicles
+        this.vehicle.update(dt);
+        this.bike.update(dt);
 
         // Reference position for LOD and UI
         const playerPos = this.playerInVehicle
-            ? this.vehicle.getPosition()
+            ? (this.currentVehicle === 'bike' ? this.bike.getPosition() : this.vehicle.getPosition())
             : this.player.getPosition();
 
         // Traffic LOD
@@ -621,8 +655,12 @@ export class Core {
 
         // Speedometer
         if (this.playerInVehicle) {
-            if (this.speedoEl) this.speedoEl.textContent = String(this.vehicle.getSpeedKmh());
-            if (this.gearEl)   this.gearEl.textContent   = `G${this.vehicle.getGear()}`;
+            const currentVehicle = this.currentVehicle === 'bike' ? this.bike : this.vehicle;
+            if (this.speedoEl) this.speedoEl.textContent = String(currentVehicle.getSpeedKmh());
+            if (this.gearEl) {
+                // Bike doesn't have gears
+                this.gearEl.textContent = this.currentVehicle === 'bike' ? '' : `G${this.vehicle.getGear()}`;
+            }
         }
 
         // Wanted level display
