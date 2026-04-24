@@ -3,6 +3,7 @@ import * as CANNON from 'cannon-es';
 import { Input } from './Input';
 import { GamepadInput } from './Gamepad';
 import { Sound } from './Sound';
+import { TouchControls } from './TouchControls';
 
 // Pre-allocated — zero per-frame heap allocations
 const _carFwd    = new THREE.Vector3();
@@ -177,11 +178,16 @@ export class Vehicle {
         let handbrake = false, throttle = false;
 
         if (this.isOccupied) {
-            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    { force =  ENGINE_FORCE; throttle = true; }
-            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  { force = -ENGINE_FORCE * 0.5; }
+            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup') || TouchControls.gasPressed)    { force =  ENGINE_FORCE; throttle = true; }
+            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown') || TouchControls.brakePressed)  { force = -ENGINE_FORCE * 0.5; }
             if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  steer =  MAX_STEER;
             if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
             handbrake = Input.isKeyDown(' ');
+            
+            // Touch steering via joystick
+            if (TouchControls.active && Math.abs(TouchControls.moveX) > 0.1) {
+                steer = -TouchControls.moveX * MAX_STEER;
+            }
 
             if (GamepadInput.connected) {
                 if (GamepadInput.rt > 0.05) { force =  ENGINE_FORCE * GamepadInput.rt; throttle = true; }
@@ -190,7 +196,7 @@ export class Vehicle {
                 if (GamepadInput.btnLB) handbrake = true;
             }
 
-            const braking = Input.isKeyDown('s') || Input.isKeyDown('arrowdown') || handbrake;
+            const braking = Input.isKeyDown('s') || Input.isKeyDown('arrowdown') || handbrake || TouchControls.brakePressed;
             this.taillightMats.forEach(m => m.emissive.setHex(braking ? 0xff4400 : 0x550000));
 
             this.sound.updateEngine(spd * 0.5, throttle);

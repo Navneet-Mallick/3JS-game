@@ -226,6 +226,7 @@ export class Core {
                 this.modeBadge.textContent = 'ON FOOT';
                 this.modeBadge.style.color = '#00ff88';
             }
+            TouchControls.showVehicleControls(false);
             this.sound.stopEngine();
             if (this.speedoBox) this.speedoBox.classList.remove('active');
 
@@ -245,6 +246,7 @@ export class Core {
                     this.modeBadge.textContent = 'IN VEHICLE';
                     this.modeBadge.style.color = '#ffff00';
                 }
+                TouchControls.showVehicleControls(true);
                 this.sound.startEngine();
                 if (this.speedoBox) this.speedoBox.classList.add('active');
             }

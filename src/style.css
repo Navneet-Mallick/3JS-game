@@ -351,7 +351,12 @@ kbd {
   gap: 10px; pointer-events: all;
 }
 
-#touch-buttons button {
+#vehicle-buttons {
+  display: flex; flex-direction: column;
+  gap: 10px; pointer-events: all;
+}
+
+#touch-buttons button, #vehicle-buttons button {
   background: rgba(255,255,255,0.75);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(0,0,0,0.12);
@@ -363,6 +368,24 @@ kbd {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+#btn-fire {
+  background: rgba(255, 107, 53, 0.85);
+  color: #fff;
+  border-color: rgba(255, 107, 53, 0.5);
+}
+
+#btn-gas {
+  background: rgba(0, 255, 136, 0.85);
+  color: #111;
+  border-color: rgba(0, 255, 136, 0.5);
+}
+
+#btn-brake {
+  background: rgba(255, 53, 53, 0.85);
+  color: #fff;
+  border-color: rgba(255, 53, 53, 0.5);
 }
 
 .gear-display {

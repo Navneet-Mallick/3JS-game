@@ -2,6 +2,7 @@
 import * as CANNON from 'cannon-es';
 import { Input } from './Input';
 import { WeaponSystem } from './WeaponSystem';
+import { TouchControls } from './TouchControls';
 
 // Pre-allocated — zero per-frame heap allocations
 const _fwdVec    = new THREE.Vector3();
@@ -226,12 +227,20 @@ export class Player {
         // Mouse look
         this.yaw   -= Input.movementX * 0.0025;
         this.pitch -= Input.movementY * 0.0025;
+        
+        // Touch look
+        if (TouchControls.active) {
+            this.yaw   -= TouchControls.lookX * 0.015;
+            this.pitch -= TouchControls.lookY * 0.015;
+        }
+        
         this.pitch  = Math.max(this.MIN_PITCH, Math.min(this.MAX_PITCH, this.pitch));
 
         if (Input.isKeyPressed('v')) this.firstPerson = !this.firstPerson;
 
-        // ── Weapon firing (Left Mouse Button or E key) ──
-        if (this.weaponSystem && (Input.isKeyDown('e') || Input.isMouseDown())) {
+        // ── Weapon firing (Left Mouse Button, E key, or Touch) ──
+        const wantsToFire = Input.isKeyDown('e') || Input.isMouseDown() || TouchControls.firePressed;
+        if (this.weaponSystem && wantsToFire) {
             const now = performance.now() / 1000;
             const stats = this.weaponSystem.getWeaponStats();
             if (now - this.lastFireTime >= stats.fireRate) {
@@ -242,11 +251,19 @@ export class Player {
             }
         }
 
-        const ix = ((Input.isKeyDown('d') || Input.isKeyDown('arrowright')) ? 1 : 0)
-                 - ((Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  ? 1 : 0);
-        const iz = ((Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  ? 1 : 0)
-                 - ((Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    ? 1 : 0);
-        const sprinting = Input.isKeyDown('shift');
+        // Movement input - keyboard or touch
+        let ix = ((Input.isKeyDown('d') || Input.isKeyDown('arrowright')) ? 1 : 0)
+               - ((Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  ? 1 : 0);
+        let iz = ((Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  ? 1 : 0)
+               - ((Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    ? 1 : 0);
+        
+        // Touch joystick input
+        if (TouchControls.active && (Math.abs(TouchControls.moveX) > 0.1 || Math.abs(TouchControls.moveY) > 0.1)) {
+            ix = TouchControls.moveX;
+            iz = TouchControls.moveY;
+        }
+        
+        const sprinting = Input.isKeyDown('shift') || TouchControls.sprintPressed;
 
         _fwdVec.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
         _rightVec.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
@@ -278,7 +295,8 @@ export class Player {
         }
 
         // Jump
-        if (Input.isKeyDown(' ') && this.onGround) {
+        const wantsToJump = Input.isKeyDown(' ') || TouchControls.jumpPressed;
+        if (wantsToJump && this.onGround) {
             this.body.velocity.y = this.jumpForce;
             this.onGround    = false;
             this.groundTimer = 0;
