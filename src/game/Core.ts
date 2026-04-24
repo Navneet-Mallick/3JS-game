@@ -52,6 +52,8 @@ export class Core {
     private pauseScreen = document.getElementById('pause-screen');
     private enterPrompt = document.getElementById('enter-prompt');
     private wantedStars = document.getElementById('wanted-stars');
+    private weaponDisplay = document.getElementById('weapon-display');
+    private ammoDisplay = document.getElementById('ammo-display');
 
     constructor() {
         try {
@@ -115,6 +117,9 @@ export class Core {
 
             this.musicSystem = new MusicSystem();
             this.weaponSystem = new WeaponSystem(this.sound);
+
+            // Connect weapon system to player
+            this.player.setWeaponSystem(this.weaponSystem);
 
             this.cheatSystem = new CheatSystem(
                 this.player,
@@ -445,6 +450,18 @@ export class Core {
         if (this.wantedStars) {
             const level = this.wantedLevel.getLevel();
             this.wantedStars.textContent = level > 0 ? '★'.repeat(level) : '';
+        }
+
+        // Weapon display (only on foot)
+        if (!this.playerInVehicle && this.weaponDisplay && this.ammoDisplay) {
+            const weaponStats = this.weaponSystem.getWeaponStats();
+            const ammo = this.weaponSystem.getAmmo();
+            this.weaponDisplay.textContent = weaponStats.name.toUpperCase();
+            if (ammo === -1) {
+                this.ammoDisplay.textContent = '∞';
+            } else {
+                this.ammoDisplay.textContent = String(ammo);
+            }
         }
 
         // Enter prompt

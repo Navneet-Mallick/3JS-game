@@ -1,6 +1,7 @@
 ﻿import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Input } from './Input';
+import { WeaponSystem } from './WeaponSystem';
 
 // Pre-allocated — zero per-frame heap allocations
 const _fwdVec    = new THREE.Vector3();
@@ -47,6 +48,10 @@ export class Player {
     public  health      = 100;
     public  armor       = 0;
     public  wantedLevel = 0;
+
+    // Weapon system
+    private weaponSystem: WeaponSystem | null = null;
+    private lastFireTime = 0;
 
     // Callback wired by Core
     public onSpeedBoost: (() => void) | null = null;
@@ -225,6 +230,18 @@ export class Player {
 
         if (Input.isKeyPressed('v')) this.firstPerson = !this.firstPerson;
 
+        // ── Weapon firing (Left Mouse Button or E key) ──
+        if (this.weaponSystem && (Input.isKeyDown('e') || Input.isMouseDown())) {
+            const now = performance.now() / 1000;
+            const stats = this.weaponSystem.getWeaponStats();
+            if (now - this.lastFireTime >= stats.fireRate) {
+                if (this.weaponSystem.fire()) {
+                    this.lastFireTime = now;
+                    // Visual feedback: slight camera shake or muzzle flash could be added here
+                }
+            }
+        }
+
         const ix = ((Input.isKeyDown('d') || Input.isKeyDown('arrowright')) ? 1 : 0)
                  - ((Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  ? 1 : 0);
         const iz = ((Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  ? 1 : 0)
@@ -368,4 +385,13 @@ export class Player {
     }
 
     public getYaw() { return this.yaw; }
+
+    // ── Weapon system integration ─────────────────────────────────────────────
+    public setWeaponSystem(weaponSystem: WeaponSystem) {
+        this.weaponSystem = weaponSystem;
+    }
+
+    public getWeaponSystem(): WeaponSystem | null {
+        return this.weaponSystem;
+    }
 }

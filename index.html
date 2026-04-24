@@ -209,6 +209,36 @@
         font-weight: 700;
       }
 
+      /* Weapon Info — bottom right, below speedometer */
+      #weapon-info {
+        position: absolute; bottom: 160px; right: 20px;
+        background: rgba(0, 0, 0, 0.8); 
+        border-radius: 8px; 
+        padding: 12px 16px;
+        color: #fff; 
+        text-align: center; 
+        min-width: 100px;
+        border: 2px solid #ffcc00;
+        box-shadow: 0 0 20px rgba(255, 204, 0, 0.4);
+        backdrop-filter: blur(10px);
+        animation: slideInRight 0.5s ease-out;
+      }
+      #weapon-display { 
+        font-size: 1rem; 
+        font-weight: 700; 
+        color: #ffcc00; 
+        line-height: 1.2;
+        text-shadow: 0 0 10px #ffcc00;
+        letter-spacing: 1px;
+      }
+      #ammo-display { 
+        font-size: 1.5rem; 
+        font-weight: 700; 
+        color: #ff6b35; 
+        margin-top: 4px;
+        text-shadow: 0 0 10px #ff6b35;
+      }
+
       /* Minimap — bottom left */
       .minimap-container {
         position: absolute; bottom: 20px; left: 20px;
@@ -332,7 +362,7 @@
       <!-- Pointer lock -->
       <div id="lock-prompt">
         <h2>Click to Play</h2>
-        <p>WASD / Arrows — Move &nbsp;·&nbsp; Mouse — Look &nbsp;·&nbsp; F — Enter/Exit Car &nbsp;·&nbsp; M — Mute</p>
+        <p>WASD / Arrows — Move &nbsp;·&nbsp; Mouse — Look &nbsp;·&nbsp; E / Left Click — Fire &nbsp;·&nbsp; F — Enter/Exit Car &nbsp;·&nbsp; M — Mute</p>
       </div>
 
       <!-- Pause -->
@@ -358,6 +388,12 @@
           <div id="wanted-stars"></div>
         </div>
 
+        <!-- Weapon Display (bottom right, below speedometer) -->
+        <div id="weapon-info">
+          <div id="weapon-display">FISTS</div>
+          <div id="ammo-display">∞</div>
+        </div>
+
         <!-- Minimap -->
         <div class="minimap-container">
           <canvas id="minimap-canvas" width="120" height="120"></canvas>
@@ -376,6 +412,7 @@
           <b>WASD</b> / <b>↑↓←→</b> Move &amp; Drive<br>
           <b>Shift</b> Sprint &nbsp; <b>Space</b> Jump / Brake<br>
           <b>F</b> Enter / Exit vehicle<br>
+          <b>E</b> or <b>Left Click</b> Fire weapon<br>
           <b>V</b> Camera view &nbsp; <b>M</b> Mute<br>
           <b>Tab</b> Show cheats
         </div>

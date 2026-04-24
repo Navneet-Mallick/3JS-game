@@ -1,6 +1,7 @@
 export class Input {
     private static keys:      Record<string, boolean> = {};
     private static keyPresses: Record<string, boolean> = {};
+    private static mouseButtons: Record<number, boolean> = {};
 
     public static movementX       = 0;
     public static movementY       = 0;
@@ -42,10 +43,20 @@ export class Input {
             // Without pointer lock mouse look is disabled (cursor visible)
             // Player can still use keyboard to move
         });
+
+        // ── Mouse buttons ─────────────────────────────────────────────────────
+        document.addEventListener('mousedown', (e) => {
+            this.mouseButtons[e.button] = true;
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            this.mouseButtons[e.button] = false;
+        });
     }
 
     public static isKeyDown(key: string)    { return !!this.keys[key.toLowerCase()]; }
     public static isKeyPressed(key: string) { return !!this.keyPresses[key.toLowerCase()]; }
+    public static isMouseDown(button: number = 0) { return !!this.mouseButtons[button]; }
 
     public static clearPerFrameData() {
         this.keyPresses = {};
