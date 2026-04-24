@@ -14,6 +14,7 @@ import { GamepadInput }  from './Gamepad';
 import { TouchControls } from './TouchControls';
 import { Pedestrian }    from './Pedestrian';
 import { WantedLevel }   from './WantedLevel';
+import { CrimeSystem }   from './CrimeSystem';
 
 const _dp = new THREE.Vector3();
 
@@ -29,6 +30,7 @@ export class Core {
     private minimap:     Minimap;
     private sound:       Sound;
     private wantedLevel: WantedLevel;
+    private crimeSystem: CrimeSystem;
 
     private lastTime        = 0;
     private playerInVehicle = false;
@@ -100,6 +102,8 @@ export class Core {
             }
 
             this.wantedLevel = new WantedLevel(this.scene.getScene());
+
+            this.crimeSystem = new CrimeSystem(this.wantedLevel);
 
             const pedSpawns: [number, number, number][] = [
                 [10, 0, 10], [-10, 0, 10], [10, 0, -10], [-10, 0, -10],
@@ -331,6 +335,44 @@ export class Core {
 
         // Police update
         this.wantedLevel.update(dt);
+        this.crimeSystem.update(dt);
+
+        // Check for crimes
+        if (this.playerInVehicle) {
+            const speed = this.vehicle.getSpeedKmh();
+            const lateralSpeed = this.vehicle.lateralSpeed;
+
+            // Speeding
+            this.crimeSystem.checkSpeeding(speed);
+
+            // Reckless driving
+            this.crimeSystem.recklessDriving(lateralSpeed);
+
+            // Check collisions with pedestrians
+            for (let i = 0; i < this.pedestrians.length; i++) {
+                const p = this.pedestrians[i];
+                if (p.isDead) continue;
+                const pPos = p.getPosition();
+                _dp.set(playerPos.x - pPos.x, 0, playerPos.z - pPos.z);
+                if (_dp.lengthSq() < 4) { // 2 unit radius
+                    this.crimeSystem.hitPedestrianWithVehicle(p, speed);
+                }
+            }
+        } else {
+            // Check weapon attacks on pedestrians
+            const weapon = this.player.getWeapon();
+            if (weapon && (weapon as any).isFiring) {
+                for (let i = 0; i < this.pedestrians.length; i++) {
+                    const p = this.pedestrians[i];
+                    if (p.isDead) continue;
+                    const pPos = p.getPosition();
+                    _dp.set(playerPos.x - pPos.x, 0, playerPos.z - pPos.z);
+                    if (_dp.lengthSq() < 9) { // 3 unit radius
+                        this.crimeSystem.beatPedestrian(p, 25);
+                    }
+                }
+            }
+        }
         for (let i = 0; i < this.police.length; i++) {
             const p = this.police[i];
             _dp.set(

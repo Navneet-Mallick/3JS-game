@@ -5,6 +5,8 @@ const _dir = new THREE.Vector3();
 
 export class Pedestrian {
     public mesh: THREE.Group;
+    public health: number = 100;
+    public isDead: boolean = false;
 
     private walkSpeed  = 2.0;
     private runSpeed   = 4.5;
@@ -56,7 +58,10 @@ export class Pedestrian {
 
     // Throttled update — called only when near player (LOD in Core)
     public update(dt: number, playerPos: THREE.Vector3) {
-        if (!this.isAlive) return;
+        if (!this.isAlive || this.isDead) {
+            this.mesh.visible = false;
+            return;
+        }
 
         // Wander timer
         this.wanderTimer -= dt;
