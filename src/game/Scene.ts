@@ -20,11 +20,13 @@ export class GameScene {
             powerPreference: 'high-performance',
             stencil: false,
             depth: true,
+            alpha: true,
+            precision: 'lowp'  // Lower precision for mobile
         });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(1); // always 1 — biggest single perf win on high-DPI screens
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap at 2x for mobile
         this.renderer.toneMapping = THREE.NoToneMapping;
-        this.renderer.shadowMap.enabled = false; // disabled — ambient+directional is enough
+        this.renderer.shadowMap.enabled = false;
         this.renderer.sortObjects = false; // skip sort — all opaque except glass (minor win)
 
         const canvas = this.renderer.domElement;

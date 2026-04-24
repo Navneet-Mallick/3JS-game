@@ -153,10 +153,7 @@ export class CheatSystem {
     }
 
     private weaponsCheat() {
-        const weapon = this.player.getWeapon();
-        if (weapon) {
-            (weapon as any).ammo = (weapon as any).maxAmmo;
-        }
+        this.weaponSystem.fullAmmo();
         this.sound.playReload();
     }
 

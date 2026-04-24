@@ -1,7 +1,6 @@
 ﻿import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Input } from './Input';
-import { Weapon } from './Weapon';
 
 // Pre-allocated — zero per-frame heap allocations
 const _fwdVec    = new THREE.Vector3();
@@ -11,8 +10,6 @@ const _camTarget = new THREE.Vector3();
 const _camPos    = new THREE.Vector3();
 const _lookDir   = new THREE.Vector3();
 const _headPos   = new THREE.Vector3();
-const _weaponPos = new THREE.Vector3();
-const _weaponQ   = new THREE.Quaternion();
 const _euler     = new THREE.Euler();
 
 export class Player {
@@ -44,10 +41,7 @@ export class Player {
     private readonly MAX_PITCH  = 0.7;
     private firstPerson = false;
 
-    private weapon: Weapon;
     private playerInVehicle = false;
-
-    // Cheat system
     private cheatBuffer  = '';
     private cheatTimeout = 0;
     public  health      = 100;
@@ -76,7 +70,6 @@ export class Player {
         });
         world.addBody(this.body);
 
-        this.weapon = new Weapon(scene, world, camera);
         this.body.addEventListener('collide', () => { this.onGround = true; this.groundTimer = 0.15; });
         this.camera.position.set(0, 5, this.ORBIT_DIST);
         this.camera.lookAt(0, 1, 0);
@@ -285,14 +278,6 @@ export class Player {
             this.body.position.z
         );
 
-        // Weapon
-        _weaponPos.set(this.body.position.x, this.body.position.y + 0.3, this.body.position.z);
-        _euler.set(this.pitch, this.yaw, 0);
-        _weaponQ.setFromEuler(_euler);
-        this.weapon.updatePosition(_weaponPos, _weaponQ);
-        this.weapon.setVisible(true);
-        this.weapon.update(dt, _weaponPos, _weaponQ);
-
         // Walk animation
         if (moving) {
             this.animTime += dt * (sprinting ? 16 : 10);
@@ -368,14 +353,11 @@ export class Player {
         this.playerInVehicle = inVehicle;
         if (inVehicle) {
             this.mesh.visible = false;  // hide Tommy
-            this.weapon.setVisible(false);
         } else {
             this.mesh.visible = true;   // show Tommy
             this.visible      = true;
-            this.weapon.setVisible(true);
         }
     }
 
-    public getYaw()          { return this.yaw; }
-    public getWeapon(): Weapon { return this.weapon; }
+    public getYaw() { return this.yaw; }
 }

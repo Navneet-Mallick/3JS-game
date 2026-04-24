@@ -398,20 +398,6 @@ export class Core {
                     this.crimeSystem.hitPedestrianWithVehicle(p, speed);
                 }
             }
-        } else {
-            // Check weapon attacks on pedestrians
-            const weapon = this.player.getWeapon();
-            if (weapon && (weapon as any).isFiring) {
-                for (let i = 0; i < this.pedestrians.length; i++) {
-                    const p = this.pedestrians[i];
-                    if (p.isDead) continue;
-                    const pPos = p.getPosition();
-                    _dp.set(playerPos.x - pPos.x, 0, playerPos.z - pPos.z);
-                    if (_dp.lengthSq() < 9) { // 3 unit radius
-                        this.crimeSystem.beatPedestrian(p, 25);
-                    }
-                }
-            }
         }
         for (let i = 0; i < this.police.length; i++) {
             const p = this.police[i];
