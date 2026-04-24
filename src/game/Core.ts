@@ -150,6 +150,11 @@ export class Core {
 
             this.minimap = new Minimap('minimap-canvas');
             this.player.onSpeedBoost = () => this.vehicle.boostSpeed();
+            
+            // Connect weapon fire callback
+            this.player.onWeaponFire = (origin, direction, damage, range) => {
+                this.handleBulletFire(origin, direction, damage, range);
+            };
 
             document.addEventListener('pointerlockchange', () => {
                 const locked = !!document.pointerLockElement;
@@ -200,6 +205,62 @@ export class Core {
         }
         this.sound.init();
         requestAnimationFrame((t) => this.animate(t));
+    }
+
+    // ── Bullet Fire Handler ───────────────────────────────────────────────────
+    private handleBulletFire(origin: THREE.Vector3, direction: THREE.Vector3, damage: number, range: number) {
+        // Create raycaster for bullet
+        const raycaster = new THREE.Raycaster(origin, direction, 0, range);
+        
+        // Check hits on pedestrians
+        let hitSomething = false;
+        for (let i = 0; i < this.pedestrians.length; i++) {
+            const ped = this.pedestrians[i];
+            if (ped.isDead || !ped.mesh.visible) continue;
+            
+            // Simple distance check first (optimization)
+            const pedPos = ped.getPosition();
+            const distSq = origin.distanceToSquared(pedPos);
+            if (distSq > range * range) continue;
+            
+            // Check if ray hits pedestrian (simple sphere collision)
+            const hitDist = raycaster.ray.distanceToPoint(pedPos);
+            if (hitDist < 0.5) { // Hit radius
+                const killed = ped.takeDamage(damage);
+                hitSomething = true;
+                
+                if (killed) {
+                    // Add wanted level for killing civilian
+                    this.wantedLevel.addWantedLevel(2);
+                    this.sound.playExplosion();
+                } else {
+                    // Add wanted level for shooting
+                    this.wantedLevel.addWantedLevel(1);
+                }
+                break; // Bullet stops at first hit
+            }
+        }
+        
+        // Check hits on police
+        for (let i = 0; i < this.police.length; i++) {
+            const cop = this.police[i];
+            const copPos = cop.getPosition();
+            const distSq = origin.distanceToSquared(copPos);
+            if (distSq > range * range) continue;
+            
+            const hitDist = raycaster.ray.distanceToPoint(copPos);
+            if (hitDist < 1.5) { // Larger hit radius for vehicles
+                // Shooting at police = instant 3 stars
+                this.wantedLevel.addWantedLevel(3);
+                hitSomething = true;
+                break;
+            }
+        }
+        
+        // Visual feedback - muzzle flash (simple)
+        if (hitSomething) {
+            // Could add hit marker here
+        }
     }
 
     // ── Enter / Exit vehicle ──────────────────────────────────────────────────
@@ -426,6 +487,9 @@ export class Core {
                 }
             }
         }
+        
+        // Police chase logic - chase if wanted level > 0 (on foot OR in vehicle)
+        const isWanted = this.wantedLevel.isWanted();
         for (let i = 0; i < this.police.length; i++) {
             const p = this.police[i];
             _dp.set(
@@ -434,7 +498,7 @@ export class Core {
                 p.getPosition().z - playerPos.z
             );
             if (_dp.lengthSq() < 25600) { // 160² - larger range for police
-                p.update(dt, playerPos, this.playerInVehicle && this.wantedLevel.isWanted());
+                p.update(dt, playerPos, isWanted); // Chase if wanted, regardless of vehicle
             }
         }
 

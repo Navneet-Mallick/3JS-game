@@ -103,4 +103,21 @@ export class Pedestrian {
     }
 
     public getPosition() { return this.mesh.position; }
+    
+    // Apply damage to pedestrian
+    public takeDamage(damage: number): boolean {
+        if (this.isDead) return false;
+        
+        this.health -= damage;
+        if (this.health <= 0) {
+            this.health = 0;
+            this.isDead = true;
+            this.isAlive = false;
+            // Simple death animation - fall down
+            this.mesh.rotation.x = Math.PI / 2;
+            this.mesh.position.y = 0.3;
+            return true; // Killed
+        }
+        return false; // Damaged but alive
+    }
 }

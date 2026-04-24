@@ -34,13 +34,16 @@ export class Police extends TrafficCar {
         }
     }
 
-    public update(dt: number, playerPosition?: THREE.Vector3, playerInVehicle?: boolean) {
+    public update(dt: number, playerPosition?: THREE.Vector3, isWanted?: boolean) {
         // Call parent update for normal traffic behavior
         super.update(dt);
 
-        // If player position provided, add chase logic
-        if (playerPosition && playerInVehicle) {
+        // If player position provided and player is wanted, chase
+        if (playerPosition && isWanted) {
             this.updateChase(dt, playerPosition);
+        } else if (this.isChasing) {
+            // Stop chasing if player is no longer wanted
+            this.stopChase();
         }
     }
 

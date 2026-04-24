@@ -53,6 +53,9 @@ export class Player {
     // Weapon system
     private weaponSystem: WeaponSystem | null = null;
     private lastFireTime = 0;
+    
+    // Bullet system callback - wired by Core
+    public onWeaponFire: ((origin: THREE.Vector3, direction: THREE.Vector3, damage: number, range: number) => void) | null = null;
 
     // Callback wired by Core
     public onSpeedBoost: (() => void) | null = null;
@@ -246,7 +249,26 @@ export class Player {
             if (now - this.lastFireTime >= stats.fireRate) {
                 if (this.weaponSystem.fire()) {
                     this.lastFireTime = now;
-                    // Visual feedback: slight camera shake or muzzle flash could be added here
+                    
+                    // Fire bullet raycast
+                    if (this.onWeaponFire && stats.range > 0) {
+                        // Calculate bullet origin (from player head/gun position)
+                        const origin = new THREE.Vector3(
+                            this.mesh.position.x,
+                            this.mesh.position.y + 1.6, // Head height
+                            this.mesh.position.z
+                        );
+                        
+                        // Calculate bullet direction (where player is looking)
+                        const direction = new THREE.Vector3(
+                            Math.sin(this.yaw) * Math.cos(this.pitch),
+                            -Math.sin(this.pitch),
+                            Math.cos(this.yaw) * Math.cos(this.pitch)
+                        ).normalize();
+                        
+                        // Fire the bullet
+                        this.onWeaponFire(origin, direction, stats.damage, stats.range);
+                    }
                 }
             }
         }
