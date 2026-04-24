@@ -21,6 +21,7 @@ export class Player {
 
     public mesh:   THREE.Group;
     public visible = true;
+    public gunMesh: THREE.Group | null = null; // Gun visual
 
     private moveSpeed   = 6;
     private sprintSpeed = 11;
@@ -34,9 +35,6 @@ export class Player {
     private rightArm!: THREE.Mesh;
     private animTime   = 0;
     private bobTime    = 0;
-    
-    // Gun visual
-    private gunMesh: THREE.Group | null = null;
 
     // Camera
     private yaw   = 0;
@@ -85,6 +83,10 @@ export class Player {
         this.body.addEventListener('collide', () => { this.onGround = true; this.groundTimer = 0.15; });
         this.camera.position.set(0, 5, this.ORBIT_DIST);
         this.camera.lookAt(0, 1, 0);
+
+        // Build gun visual
+        this.gunMesh = this.buildGunModel();
+        this.scene.add(this.gunMesh);
 
         window.addEventListener('keydown', (e) => this.handleCheat(e.key));
     }
@@ -423,6 +425,21 @@ export class Player {
             this.body.position.y - 1.0,
             this.body.position.z
         );
+        
+        // Update gun position and visibility
+        if (this.gunMesh && this.weaponSystem) {
+            const currentWeapon = this.weaponSystem.getCurrentWeapon();
+            const hasGun = currentWeapon !== 'fists';
+            this.gunMesh.visible = hasGun && !this.firstPerson;
+            
+            if (hasGun) {
+                // Position gun in right hand
+                const gunOffset = new THREE.Vector3(0.3, 1.3, 0.3);
+                gunOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+                this.gunMesh.position.copy(this.mesh.position).add(gunOffset);
+                this.gunMesh.rotation.y = this.mesh.rotation.y;
+            }
+        }
 
         // Walk animation
         if (moving) {
@@ -499,6 +516,7 @@ export class Player {
         this.playerInVehicle = inVehicle;
         if (inVehicle) {
             this.mesh.visible = false;  // hide Tommy
+            if (this.gunMesh) this.gunMesh.visible = false; // hide gun
             // Stop all player movement when entering vehicle
             this.body.velocity.set(0, 0, 0);
             this.body.angularVelocity.set(0, 0, 0);

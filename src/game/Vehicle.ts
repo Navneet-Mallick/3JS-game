@@ -157,89 +157,7 @@ export class Vehicle {
     }
 
     public update(dt: number) {
-        const spd = this.getSpeedKmh();
-
-        if (this.speedBoostTimer > 0) { this.speedBoostTimer -= dt; this.speedBoostMultiplier = 1.6; }
-        else                          { this.speedBoostMultiplier = 1.0; }
-
-        this.gearTimer += dt;
-        if (this.gearTimer > 0.5) {
-            this.gearTimer = 0;
-            if (spd > this.gear * 25 && this.gear < this.MAX_GEAR) this.gear++;
-            else if (spd < (this.gear - 1) * 18 && this.gear > 1)  this.gear--;
-        }
-
-        const gearRatio    = this.GEAR_RATIOS[this.gear] ?? 1;
-        const ENGINE_FORCE = 1500 * gearRatio * this.speedBoostMultiplier;
-        const BRAKE_FORCE  = 80;
-        const MAX_STEER    = Math.max(0.3, 0.65 - spd * 0.004);
-
-        let force = 0, steer = 0, brake = 0;
-        let handbrake = false, throttle = false;
-
-        if (this.isOccupied) {
-            // Keyboard controls
-            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    { force =  ENGINE_FORCE; throttle = true; }
-            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  { force = -ENGINE_FORCE * 0.5; }
-            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  steer =  MAX_STEER;
-            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
-            handbrake = Input.isKeyDown(' ');
-            
-            // Touch controls
-            if (TouchControls.active) {
-                if (TouchControls.gasPressed) { force = ENGINE_FORCE; throttle = true; }
-                if (TouchControls.brakePressed) { force = -ENGINE_FORCE * 0.5; }
-                if (Math.abs(TouchControls.moveX) > 0.1) {
-                    steer = -TouchControls.moveX * MAX_STEER;
-                }
-            }
-
-            // Gamepad controls
-            if (GamepadInput.connected) {
-                if (GamepadInput.rt > 0.05) { force =  ENGINE_FORCE * GamepadInput.rt; throttle = true; }
-                if (GamepadInput.lt > 0.05)   force = -ENGINE_FORCE * GamepadInput.lt * 0.5;
-                if (Math.abs(GamepadInput.leftX) > 0.05) steer = -GamepadInput.leftX * MAX_STEER;
-                if (GamepadInput.btnLB) handbrake = true;
-            }
-
-            const braking = Input.isKeyDown('s') || Input.isKeyDown('arrowdown') || handbrake || TouchControls.brakePressed;
-            this.taillightMats.forEach(m => m.emissive.setHex(braking ? 0xff4400 : 0x550000));
-
-            this.sound.updateEngine(spd * 0.5, throttle);
-            this.updateCamera(dt); // ← ONLY update camera when occupied
-        } else {
-            // When not occupied, apply strong brake to stop vehicle
-            brake = 20;
-            this.taillightMats.forEach(m => m.emissive.setHex(0x220000));
-        }
-
-        // Lateral speed for drift detection
-        _carFwd.set(0, 0, 1).applyQuaternion(
-            this.chassisBody.quaternion as unknown as THREE.Quaternion
-        );
-        _vel.set(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
-        this.lateralSpeed = _vel.clone()
-            .sub(_carFwd.multiplyScalar(_vel.dot(_carFwd)))
-            .length();
-
-        // Smooth steering
-        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 12 * dt);
-
-        this.vehicle.applyEngineForce(force, 2);
-        this.vehicle.applyEngineForce(force, 3);
-        this.vehicle.setSteeringValue(this.currentSteeringValue, 0);
-        this.vehicle.setSteeringValue(this.currentSteeringValue, 1);
-
-        if (handbrake) {
-            this.vehicle.setBrake(0, 0);
-            this.vehicle.setBrake(0, 1);
-            this.vehicle.setBrake(BRAKE_FORCE * 4, 2);
-            this.vehicle.setBrake(BRAKE_FORCE * 4, 3);
-        } else {
-            for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i);
-        }
-
-        // Sync mesh to physics
+        // Always update physics sync first
         this.chassisMesh.position.copy(
             this.chassisBody.position as unknown as THREE.Vector3
         );
@@ -254,9 +172,99 @@ export class Vehicle {
             this.wheelMeshes[i].quaternion.copy(t.quaternion as unknown as THREE.Quaternion);
         }
 
+        const spd = this.getSpeedKmh();
+
+        if (this.speedBoostTimer > 0) { this.speedBoostTimer -= dt; this.speedBoostMultiplier = 1.6; }
+        else                          { this.speedBoostMultiplier = 1.0; }
+
+        this.gearTimer += dt;
+        if (this.gearTimer > 0.5) {
+            this.gearTimer = 0;
+            if (spd > this.gear * 25 && this.gear < this.MAX_GEAR) this.gear++;
+            else if (spd < (this.gear - 1) * 18 && this.gear > 1)  this.gear--;
+        }
+
+        const gearRatio    = this.GEAR_RATIOS[this.gear] ?? 1;
+        const ENGINE_FORCE = 2000 * gearRatio * this.speedBoostMultiplier; // Increased for better response
+        const BRAKE_FORCE  = 100;
+        const MAX_STEER    = Math.max(0.35, 0.7 - spd * 0.004);
+
+        let force = 0, steer = 0, brake = 0;
+        let handbrake = false, throttle = false;
+
+        if (this.isOccupied) {
+            // Keyboard controls
+            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    { force =  ENGINE_FORCE; throttle = true; }
+            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  { force = -ENGINE_FORCE * 0.6; }
+            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  steer =  MAX_STEER;
+            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
+            handbrake = Input.isKeyDown(' ');
+            
+            // Touch controls
+            if (TouchControls.active) {
+                if (TouchControls.gasPressed) { force = ENGINE_FORCE; throttle = true; }
+                if (TouchControls.brakePressed) { force = -ENGINE_FORCE * 0.6; }
+                if (Math.abs(TouchControls.moveX) > 0.1) {
+                    steer = -TouchControls.moveX * MAX_STEER;
+                }
+            }
+
+            // Gamepad controls
+            if (GamepadInput.connected) {
+                if (GamepadInput.rt > 0.05) { force =  ENGINE_FORCE * GamepadInput.rt; throttle = true; }
+                if (GamepadInput.lt > 0.05)   force = -ENGINE_FORCE * GamepadInput.lt * 0.6;
+                if (Math.abs(GamepadInput.leftX) > 0.05) steer = -GamepadInput.leftX * MAX_STEER;
+                if (GamepadInput.btnLB) handbrake = true;
+            }
+
+            const braking = Input.isKeyDown('s') || Input.isKeyDown('arrowdown') || handbrake || TouchControls.brakePressed;
+            this.taillightMats.forEach(m => m.emissive.setHex(braking ? 0xff4400 : 0x550000));
+
+            this.sound.updateEngine(spd * 0.5, throttle);
+            this.updateCamera(dt);
+        } else {
+            // When not occupied, apply strong brake
+            brake = 30;
+            force = 0;
+            this.taillightMats.forEach(m => m.emissive.setHex(0x220000));
+        }
+
+        // Lateral speed for drift detection
+        _carFwd.set(0, 0, 1).applyQuaternion(
+            this.chassisBody.quaternion as unknown as THREE.Quaternion
+        );
+        _vel.set(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
+        this.lateralSpeed = _vel.clone()
+            .sub(_carFwd.multiplyScalar(_vel.dot(_carFwd)))
+            .length();
+
+        // Smooth steering
+        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 15 * dt);
+
+        // Apply forces
+        this.vehicle.applyEngineForce(force, 2);
+        this.vehicle.applyEngineForce(force, 3);
+        this.vehicle.setSteeringValue(this.currentSteeringValue, 0);
+        this.vehicle.setSteeringValue(this.currentSteeringValue, 1);
+
+        if (handbrake) {
+            this.vehicle.setBrake(0, 0);
+            this.vehicle.setBrake(0, 1);
+            this.vehicle.setBrake(BRAKE_FORCE * 5, 2);
+            this.vehicle.setBrake(BRAKE_FORCE * 5, 3);
+        } else {
+            for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i);
+        }
+
         // SAFETY: Prevent vehicle from falling through world
-        if (this.chassisBody.position.y < -50) {
+        if (this.chassisBody.position.y < -10) {
             this.resetPosition();
+        }
+        
+        // Keep vehicle upright if flipped
+        if (this.chassisBody.position.y < 0.5) {
+            this.chassisBody.position.y = 1.2;
+            this.chassisBody.velocity.y = 0;
         }
     }
 
