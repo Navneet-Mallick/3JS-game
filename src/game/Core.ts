@@ -177,6 +177,21 @@ export class Core {
 
             document.addEventListener('keydown', (e) => {
                 if (e.key.toLowerCase() === 'm') this.sound.toggleMute();
+                
+                // Weapon switching with number keys (1-5)
+                if (!this.playerInVehicle) {
+                    const weaponKeys: Record<string, any> = {
+                        '1': 'fists',
+                        '2': 'pistol',
+                        '3': 'shotgun',
+                        '4': 'rifle',
+                        '5': 'minigun'
+                    };
+                    if (weaponKeys[e.key]) {
+                        this.weaponSystem.switchWeapon(weaponKeys[e.key]);
+                    }
+                }
+                
                 // Pass all keys to cheat system
                 this.cheatSystem.handleKeyPress(e.key);
             });
@@ -212,8 +227,13 @@ export class Core {
         // Create raycaster for bullet
         const raycaster = new THREE.Raycaster(origin, direction, 0, range);
         
+        // Muzzle flash effect
+        this.createMuzzleFlash(origin, direction);
+        
         // Check hits on pedestrians
         let hitSomething = false;
+        let hitPosition: THREE.Vector3 | null = null;
+        
         for (let i = 0; i < this.pedestrians.length; i++) {
             const ped = this.pedestrians[i];
             if (ped.isDead || !ped.mesh.visible) continue;
@@ -228,6 +248,10 @@ export class Core {
             if (hitDist < 0.5) { // Hit radius
                 const killed = ped.takeDamage(damage);
                 hitSomething = true;
+                hitPosition = pedPos.clone();
+                
+                // Blood effect
+                this.createBloodEffect(pedPos);
                 
                 if (killed) {
                     // Add wanted level for killing civilian
@@ -253,14 +277,73 @@ export class Core {
                 // Shooting at police = instant 3 stars
                 this.wantedLevel.addWantedLevel(3);
                 hitSomething = true;
+                hitPosition = copPos.clone();
+                this.createBloodEffect(copPos);
                 break;
             }
         }
         
-        // Visual feedback - muzzle flash (simple)
-        if (hitSomething) {
-            // Could add hit marker here
+        // Show hit marker if we hit something
+        if (hitSomething && hitPosition) {
+            this.showHitMarker();
         }
+    }
+    
+    // ── Visual Effects ────────────────────────────────────────────────────────
+    private createMuzzleFlash(origin: THREE.Vector3, direction: THREE.Vector3) {
+        const flash = new THREE.Mesh(
+            new THREE.SphereGeometry(0.15, 8, 8),
+            new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.8 })
+        );
+        flash.position.copy(origin).add(direction.clone().multiplyScalar(0.5));
+        this.scene.getScene().add(flash);
+        
+        // Remove after 50ms
+        setTimeout(() => {
+            this.scene.getScene().remove(flash);
+        }, 50);
+    }
+    
+    private createBloodEffect(position: THREE.Vector3) {
+        // Simple red particle effect
+        for (let i = 0; i < 5; i++) {
+            const particle = new THREE.Mesh(
+                new THREE.SphereGeometry(0.05, 4, 4),
+                new THREE.MeshBasicMaterial({ color: 0xff0000 })
+            );
+            particle.position.copy(position);
+            particle.position.y += Math.random() * 0.5;
+            this.scene.getScene().add(particle);
+            
+            // Animate and remove
+            const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 2,
+                Math.random() * 2,
+                (Math.random() - 0.5) * 2
+            );
+            
+            let life = 0;
+            const animate = () => {
+                life += 0.016;
+                if (life > 0.5) {
+                    this.scene.getScene().remove(particle);
+                    return;
+                }
+                particle.position.add(velocity.clone().multiplyScalar(0.016));
+                velocity.y -= 9.8 * 0.016; // Gravity
+                requestAnimationFrame(animate);
+            };
+            animate();
+        }
+    }
+    
+    private showHitMarker() {
+        const marker = document.getElementById('hit-marker');
+        if (!marker) return;
+        marker.style.opacity = '1';
+        setTimeout(() => {
+            marker.style.opacity = '0';
+        }, 100);
     }
 
     // ── Enter / Exit vehicle ──────────────────────────────────────────────────
@@ -547,6 +630,12 @@ export class Core {
                 this.ammoDisplay.textContent = String(ammo);
             }
         }
+        
+        // Health and Armor display
+        const healthBar = document.getElementById('health-bar');
+        const armorBar = document.getElementById('armor-bar');
+        if (healthBar) healthBar.style.width = `${this.player.health}%`;
+        if (armorBar) armorBar.style.width = `${this.player.armor}%`;
 
         // Enter prompt
         if (this.enterPrompt) {

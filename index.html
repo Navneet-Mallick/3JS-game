@@ -374,6 +374,31 @@
       <!-- HUD -->
       <div class="game-ui">
         <div class="crosshair"></div>
+        
+        <!-- Hit Marker -->
+        <div id="hit-marker" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; opacity: 0; transition: opacity 0.1s; pointer-events: none;">
+          <div style="position: absolute; width: 10px; height: 2px; background: #ff0000; top: 19px; left: 0;"></div>
+          <div style="position: absolute; width: 10px; height: 2px; background: #ff0000; top: 19px; right: 0;"></div>
+          <div style="position: absolute; width: 2px; height: 10px; background: #ff0000; left: 19px; top: 0;"></div>
+          <div style="position: absolute; width: 2px; height: 10px; background: #ff0000; left: 19px; bottom: 0;"></div>
+        </div>
+        
+        <!-- Health and Armor Bars -->
+        <div id="health-armor-container" style="position: absolute; bottom: 20px; left: 20px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: #ff0000; font-weight: 700; font-size: 14px; text-shadow: 0 0 4px #000;">❤</span>
+            <div style="width: 150px; height: 20px; background: rgba(0,0,0,0.7); border: 2px solid rgba(255,0,0,0.5); border-radius: 4px; overflow: hidden;">
+              <div id="health-bar" style="width: 100%; height: 100%; background: linear-gradient(90deg, #ff0000, #ff4444); transition: width 0.3s;"></div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: #00ffff; font-weight: 700; font-size: 14px; text-shadow: 0 0 4px #000;">🛡</span>
+            <div style="width: 150px; height: 20px; background: rgba(0,0,0,0.7); border: 2px solid rgba(0,255,255,0.5); border-radius: 4px; overflow: hidden;">
+              <div id="armor-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #00ffff, #44ffff); transition: width 0.3s;"></div>
+            </div>
+          </div>
+        </div>
+        
         <div id="mode-badge">ON FOOT</div>
 
         <!-- Speedometer (shown in vehicle) -->
@@ -413,6 +438,7 @@
           <b>Shift</b> Sprint &nbsp; <b>Space</b> Jump / Brake<br>
           <b>F</b> Enter / Exit vehicle<br>
           <b>E</b> or <b>Left Click</b> Fire weapon<br>
+          <b>1-5</b> Switch weapons<br>
           <b>V</b> Camera view &nbsp; <b>M</b> Mute<br>
           <b>Tab</b> Show cheats
         </div>
