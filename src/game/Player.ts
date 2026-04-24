@@ -34,6 +34,9 @@ export class Player {
     private rightArm!: THREE.Mesh;
     private animTime   = 0;
     private bobTime    = 0;
+    
+    // Gun visual
+    private gunMesh: THREE.Group | null = null;
 
     // Camera
     private yaw   = 0;
@@ -174,6 +177,73 @@ export class Player {
 
         return g;
     }
+    
+    // ── Build Gun Model ───────────────────────────────────────────────────────
+    private buildGunModel(): THREE.Group {
+        const g = new THREE.Group();
+        
+        const gunMetal = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+        const gunBarrel = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+        const gunGrip = new THREE.MeshLambertMaterial({ color: 0x3a2a1a });
+        
+        // Barrel
+        const barrel = new THREE.Mesh(
+            new THREE.BoxGeometry(0.03, 0.03, 0.15),
+            gunBarrel
+        );
+        barrel.position.set(0, 0, 0.075);
+        g.add(barrel);
+        
+        // Body
+        const body = new THREE.Mesh(
+            new THREE.BoxGeometry(0.04, 0.06, 0.08),
+            gunMetal
+        );
+        body.position.set(0, -0.01, -0.02);
+        g.add(body);
+        
+        // Grip
+        const grip = new THREE.Mesh(
+            new THREE.BoxGeometry(0.03, 0.08, 0.04),
+            gunGrip
+        );
+        grip.position.set(0, -0.05, -0.04);
+        g.add(grip);
+        
+        // Trigger guard
+        const trigger = new THREE.Mesh(
+            new THREE.BoxGeometry(0.02, 0.03, 0.02),
+            gunMetal
+        );
+        trigger.position.set(0, -0.02, -0.02);
+        g.add(trigger);
+        
+        return g;
+    }
+    
+    // ── Show/Hide Gun ─────────────────────────────────────────────────────────
+    private updateGunVisual() {
+        if (!this.weaponSystem) return;
+        
+        const currentWeapon = this.weaponSystem.getCurrentWeapon();
+        const shouldShowGun = currentWeapon !== 'fists';
+        
+        if (shouldShowGun && !this.gunMesh) {
+            // Create gun
+            this.gunMesh = this.buildGunModel();
+            this.mesh.add(this.gunMesh);
+        }
+        
+        if (this.gunMesh) {
+            this.gunMesh.visible = shouldShowGun;
+            
+            if (shouldShowGun) {
+                // Position gun in right hand
+                this.gunMesh.position.set(0.40, 0.85, 0.15);
+                this.gunMesh.rotation.set(0, Math.PI / 2, 0);
+            }
+        }
+    }
 
     // ── Cheat codes ───────────────────────────────────────────────────────────
     private readonly CHEATS: Record<string, () => void> = {
@@ -241,6 +311,9 @@ export class Player {
 
         if (Input.isKeyPressed('v')) this.firstPerson = !this.firstPerson;
 
+        // Update gun visual
+        this.updateGunVisual();
+
         // ── Weapon firing (Left Mouse Button, E key, or Touch) ──
         const wantsToFire = Input.isKeyDown('e') || Input.isMouseDown() || TouchControls.firePressed;
         if (this.weaponSystem && wantsToFire) {
@@ -249,6 +322,22 @@ export class Player {
             if (now - this.lastFireTime >= stats.fireRate) {
                 if (this.weaponSystem.fire()) {
                     this.lastFireTime = now;
+                    
+                    // Gun recoil animation (optimized)
+                    if (this.gunMesh) {
+                        const originalZ = this.gunMesh.position.z;
+                        this.gunMesh.position.z -= 0.05; // Recoil back
+                        // Use requestAnimationFrame instead of setTimeout
+                        const startTime = performance.now();
+                        const resetRecoil = () => {
+                            if (performance.now() - startTime > 50) {
+                                if (this.gunMesh) this.gunMesh.position.z = originalZ;
+                            } else {
+                                requestAnimationFrame(resetRecoil);
+                            }
+                        };
+                        requestAnimationFrame(resetRecoil);
+                    }
                     
                     // Fire bullet raycast
                     if (this.onWeaponFire && stats.range > 0) {

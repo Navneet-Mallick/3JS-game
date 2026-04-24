@@ -39,6 +39,9 @@ export class Core {
     private bombs: Bomb[] = [];
     private musicSystem: MusicSystem;
     private weaponSystem: WeaponSystem;
+    
+    // Reusable raycaster for bullets (performance optimization)
+    private bulletRaycaster = new THREE.Raycaster();
 
     private lastTime        = 0;
     private playerInVehicle = false;
@@ -298,15 +301,21 @@ export class Core {
         flash.position.copy(origin).add(direction.clone().multiplyScalar(0.5));
         this.scene.getScene().add(flash);
         
-        // Remove after 50ms
-        setTimeout(() => {
-            this.scene.getScene().remove(flash);
-        }, 50);
+        // Remove after 50ms using requestAnimationFrame (more efficient)
+        const startTime = performance.now();
+        const checkRemove = () => {
+            if (performance.now() - startTime > 50) {
+                this.scene.getScene().remove(flash);
+            } else {
+                requestAnimationFrame(checkRemove);
+            }
+        };
+        requestAnimationFrame(checkRemove);
     }
     
     private createBloodEffect(position: THREE.Vector3) {
-        // Simple red particle effect
-        for (let i = 0; i < 5; i++) {
+        // Reduced to 3 particles for performance
+        for (let i = 0; i < 3; i++) {
             const particle = new THREE.Mesh(
                 new THREE.SphereGeometry(0.05, 4, 4),
                 new THREE.MeshBasicMaterial({ color: 0xff0000 })
@@ -323,11 +332,14 @@ export class Core {
             );
             
             let life = 0;
+            const maxLife = 0.5;
+            const startTime = performance.now();
+            
             const animate = () => {
-                life += 0.016;
-                if (life > 0.5) {
+                const elapsed = (performance.now() - startTime) / 1000;
+                if (elapsed > maxLife) {
                     this.scene.getScene().remove(particle);
-                    return;
+                    return; // Stop loop
                 }
                 particle.position.add(velocity.clone().multiplyScalar(0.016));
                 velocity.y -= 9.8 * 0.016; // Gravity
