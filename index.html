@@ -71,6 +71,15 @@
       .speed-unit   { font-size: 0.65rem; color: #888; }
       #gear-value   { font-size: 0.85rem; color: #ffcc00; margin-top: 2px; }
 
+      /* Wanted Level — top right */
+      #wanted-level {
+        position: absolute; top: 20px; right: 20px;
+        background: rgba(0,0,0,0.6); border-radius: 8px; padding: 10px 16px;
+        color: #fff; text-align: center; min-width: 100px;
+      }
+      #wanted-stars { font-size: 1.5rem; color: #ff6b35; letter-spacing: 2px; }
+      #wanted-stars:empty::before { content: 'CLEAN'; color: #00ff88; font-size: 0.9rem; font-weight: 700; }
+
       /* Minimap — bottom left */
       .minimap-container {
         position: absolute; bottom: 20px; left: 20px;
@@ -153,6 +162,11 @@
           <div id="speedo-value">0</div>
           <div class="speed-unit">km/h</div>
           <div id="gear-value">G1</div>
+        </div>
+
+        <!-- Wanted Level -->
+        <div id="wanted-level">
+          <div id="wanted-stars"></div>
         </div>
 
         <!-- Minimap -->

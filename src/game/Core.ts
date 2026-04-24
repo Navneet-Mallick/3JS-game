@@ -8,10 +8,12 @@ import { City }          from './City';
 import { Minimap }       from './Minimap';
 import { Input }         from './Input';
 import { TrafficCar }    from './TrafficCar';
+import { Police }        from './Police';
 import { Sound }         from './Sound';
 import { GamepadInput }  from './Gamepad';
 import { TouchControls } from './TouchControls';
 import { Pedestrian }    from './Pedestrian';
+import { WantedLevel }   from './WantedLevel';
 
 const _dp = new THREE.Vector3();
 
@@ -22,9 +24,11 @@ export class Core {
     private vehicle:     Vehicle;
     private city:        City;
     private traffic:     TrafficCar[] = [];
+    private police:      Police[] = [];
     private pedestrians: Pedestrian[] = [];
     private minimap:     Minimap;
     private sound:       Sound;
+    private wantedLevel: WantedLevel;
 
     private lastTime        = 0;
     private playerInVehicle = false;
@@ -37,6 +41,7 @@ export class Core {
     private lockPrompt  = document.getElementById('lock-prompt');
     private pauseScreen = document.getElementById('pause-screen');
     private enterPrompt = document.getElementById('enter-prompt');
+    private wantedStars = document.getElementById('wanted-stars');
 
     constructor() {
         try {
@@ -80,6 +85,21 @@ export class Core {
                     new CANNON.Vec3(x, y, z)
                 ));
             }
+
+            // Spawn police cars
+            const policeSpawns: [number, number, number][] = [
+                [ 50, 0, -50], [-50, 0, -50],
+                [ 50, 0,  50], [-50, 0,  50],
+            ];
+            for (const [x, y, z] of policeSpawns) {
+                this.police.push(new Police(
+                    this.scene.getScene(),
+                    this.physics.getWorld(),
+                    new CANNON.Vec3(x, y, z)
+                ));
+            }
+
+            this.wantedLevel = new WantedLevel(this.scene.getScene());
 
             const pedSpawns: [number, number, number][] = [
                 [10, 0, 10], [-10, 0, 10], [10, 0, -10], [-10, 0, -10],
@@ -264,6 +284,16 @@ export class Core {
             this.player.setPosition(5, 1, 0);
         }
 
+        // Handle wanted level cheat (press G to gain wanted level)
+        if (Input.isKeyPressed('g') && this.playerInVehicle) {
+            this.wantedLevel.addWantedLevel(1);
+        }
+
+        // Handle clear wanted level (press C)
+        if (Input.isKeyPressed('c')) {
+            this.wantedLevel.clearWantedLevel();
+        }
+
         if (this.paused) {
             Input.clearPerFrameData();
             return;
@@ -299,6 +329,20 @@ export class Core {
             if (_dp.lengthSq() < 16900) t.update(dt); // 130²
         }
 
+        // Police update
+        this.wantedLevel.update(dt);
+        for (let i = 0; i < this.police.length; i++) {
+            const p = this.police[i];
+            _dp.set(
+                p.getPosition().x - playerPos.x,
+                0,
+                p.getPosition().z - playerPos.z
+            );
+            if (_dp.lengthSq() < 25600) { // 160² - larger range for police
+                p.update(dt, playerPos, this.playerInVehicle && this.wantedLevel.isWanted());
+            }
+        }
+
         // Pedestrian LOD
         for (let i = 0; i < this.pedestrians.length; i++) {
             const p = this.pedestrians[i];
@@ -318,6 +362,12 @@ export class Core {
         if (this.playerInVehicle) {
             if (this.speedoEl) this.speedoEl.textContent = String(this.vehicle.getSpeedKmh());
             if (this.gearEl)   this.gearEl.textContent   = `G${this.vehicle.getGear()}`;
+        }
+
+        // Wanted level display
+        if (this.wantedStars) {
+            const level = this.wantedLevel.getLevel();
+            this.wantedStars.textContent = level > 0 ? '★'.repeat(level) : '';
         }
 
         // Enter prompt
