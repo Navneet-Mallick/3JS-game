@@ -170,25 +170,31 @@ export class Vehicle {
         }
 
         const gearRatio    = this.GEAR_RATIOS[this.gear] ?? 1;
-        const ENGINE_FORCE = 1500 * gearRatio * this.speedBoostMultiplier; // Increased from 1200
-        const BRAKE_FORCE  = 80;  // Increased from 60
-        const MAX_STEER    = Math.max(0.3, 0.65 - spd * 0.004);  // More responsive steering at all speeds
+        const ENGINE_FORCE = 1500 * gearRatio * this.speedBoostMultiplier;
+        const BRAKE_FORCE  = 80;
+        const MAX_STEER    = Math.max(0.3, 0.65 - spd * 0.004);
 
         let force = 0, steer = 0, brake = 0;
         let handbrake = false, throttle = false;
 
         if (this.isOccupied) {
-            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup') || TouchControls.gasPressed)    { force =  ENGINE_FORCE; throttle = true; }
-            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown') || TouchControls.brakePressed)  { force = -ENGINE_FORCE * 0.5; }
+            // Keyboard controls
+            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    { force =  ENGINE_FORCE; throttle = true; }
+            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  { force = -ENGINE_FORCE * 0.5; }
             if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  steer =  MAX_STEER;
             if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
             handbrake = Input.isKeyDown(' ');
             
-            // Touch steering via joystick
-            if (TouchControls.active && Math.abs(TouchControls.moveX) > 0.1) {
-                steer = -TouchControls.moveX * MAX_STEER;
+            // Touch controls
+            if (TouchControls.active) {
+                if (TouchControls.gasPressed) { force = ENGINE_FORCE; throttle = true; }
+                if (TouchControls.brakePressed) { force = -ENGINE_FORCE * 0.5; }
+                if (Math.abs(TouchControls.moveX) > 0.1) {
+                    steer = -TouchControls.moveX * MAX_STEER;
+                }
             }
 
+            // Gamepad controls
             if (GamepadInput.connected) {
                 if (GamepadInput.rt > 0.05) { force =  ENGINE_FORCE * GamepadInput.rt; throttle = true; }
                 if (GamepadInput.lt > 0.05)   force = -ENGINE_FORCE * GamepadInput.lt * 0.5;
@@ -200,9 +206,10 @@ export class Vehicle {
             this.taillightMats.forEach(m => m.emissive.setHex(braking ? 0xff4400 : 0x550000));
 
             this.sound.updateEngine(spd * 0.5, throttle);
-            this.updateCamera(dt); // ← vehicle controls camera when occupied
+            this.updateCamera(dt); // ← ONLY update camera when occupied
         } else {
-            brake = 8;
+            // When not occupied, apply strong brake to stop vehicle
+            brake = 20;
             this.taillightMats.forEach(m => m.emissive.setHex(0x220000));
         }
 
@@ -215,7 +222,7 @@ export class Vehicle {
             .sub(_carFwd.multiplyScalar(_vel.dot(_carFwd)))
             .length();
 
-        // Smooth steering - faster response for better control
+        // Smooth steering
         this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 12 * dt);
 
         this.vehicle.applyEngineForce(force, 2);
@@ -247,16 +254,9 @@ export class Vehicle {
             this.wheelMeshes[i].quaternion.copy(t.quaternion as unknown as THREE.Quaternion);
         }
 
-        // SAFETY: Prevent vehicle from falling through world or getting stuck
-        // If vehicle is too far below ground, reset it
+        // SAFETY: Prevent vehicle from falling through world
         if (this.chassisBody.position.y < -50) {
             this.resetPosition();
-        }
-
-        // Prevent extreme rotations that can cause physics instability
-        const rot = this.chassisBody.quaternion;
-        if (Math.abs(rot.x) > 1 || Math.abs(rot.y) > 1 || Math.abs(rot.z) > 1 || Math.abs(rot.w) > 1) {
-            this.chassisBody.quaternion.normalize();
         }
     }
 

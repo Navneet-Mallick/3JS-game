@@ -210,18 +210,30 @@ export class Core {
         if (!pressed) return;
 
         if (this.playerInVehicle) {
-            // EXIT
+            // ═══ EXIT VEHICLE ═══
             this.playerInVehicle = false;
             
-            // Spawn Tommy beside the car BEFORE setting vehicle state
+            // Get vehicle position and spawn player beside it
             const vp = this.vehicle.getPosition();
-            this.player.setPosition(vp.x + 2.5, vp.y + 1.5, vp.z);
+            const vBody = this.vehicle.chassisBody;
             
-            // Now update states
-            this.player.setInVehicle(false);   // shows Tommy, restores camera, resets velocity
+            // Calculate safe exit position (to the right of vehicle)
+            const exitOffset = new THREE.Vector3(3, 0, 0);
+            exitOffset.applyQuaternion(vBody.quaternion as unknown as THREE.Quaternion);
+            
+            // Set player position FIRST
+            this.player.setPosition(
+                vp.x + exitOffset.x, 
+                vp.y + 2, 
+                vp.z + exitOffset.z
+            );
+            
+            // Then update states
+            this.player.setInVehicle(false);
             this.vehicle.isOccupied = false;
             this.vehicle.setVisible(true);
 
+            // UI updates
             if (this.modeBadge) {
                 this.modeBadge.textContent = 'ON FOOT';
                 this.modeBadge.style.color = '#00ff88';
@@ -231,17 +243,23 @@ export class Core {
             if (this.speedoBox) this.speedoBox.classList.remove('active');
 
         } else {
-            // ENTER — only if close enough
+            // ═══ ENTER VEHICLE ═══
             const pp = this.player.getPosition();
             const vp = this.vehicle.getPosition();
             _dp.set(pp.x - vp.x, pp.y - vp.y, pp.z - vp.z);
 
             if (_dp.lengthSq() < 25) {
                 this.playerInVehicle = true;
-                this.player.setInVehicle(true);    // hides Tommy, stops player camera, resets velocity
-                this.vehicle.isOccupied = true;    // vehicle now controls camera
+                
+                // Wake up vehicle physics
+                this.vehicle.chassisBody.wakeUp();
+                
+                // Update states
+                this.player.setInVehicle(true);
+                this.vehicle.isOccupied = true;
                 this.vehicle.setVisible(true);
 
+                // UI updates
                 if (this.modeBadge) {
                     this.modeBadge.textContent = 'IN VEHICLE';
                     this.modeBadge.style.color = '#ffff00';
