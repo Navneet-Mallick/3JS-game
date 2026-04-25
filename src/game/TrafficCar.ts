@@ -39,8 +39,8 @@ function randomWaypoint(): THREE.Vector3 {
 export class TrafficCar {
     public chassisBody: CANNON.Body;
     private chassisMesh: THREE.Group;
-    private vehicle: CANNON.RaycastVehicle;
-    private wheelMeshes: THREE.Group[] = [];
+    protected vehicle: CANNON.RaycastVehicle;
+    protected wheelMeshes: THREE.Group[] = [];
 
     private waypoint: THREE.Vector3;
     private stuckTimer = 0;
@@ -57,7 +57,7 @@ export class TrafficCar {
     private readonly CAM_DIST = 10;
     private mouseIdleTimer = 0;
     private gear = 1;
-    private currentSteeringValue = 0;
+    protected currentSteeringValue = 0;
 
     constructor(scene: THREE.Scene, world: CANNON.World, position: CANNON.Vec3) {
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];

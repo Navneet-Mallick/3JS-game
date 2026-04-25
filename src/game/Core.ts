@@ -585,6 +585,60 @@ export class Core {
         }
     }
 
+    private updateHUD(dt: number) {
+        const hpBar = document.getElementById('health-bar');
+        const arBar = document.getElementById('armor-bar');
+        if (hpBar) hpBar.style.width = `${Math.max(0, this.player.health)}%`;
+        if (arBar) arBar.style.width = `${Math.max(0, this.player.armor)}%`;
+
+        const starEl = document.getElementById('wanted-stars');
+        if (starEl) {
+            const level = this.wantedLevel.getLevel();
+            starEl.textContent = '★'.repeat(level);
+            starEl.style.color = level > 0 ? '#ffcc00' : '#00ff88';
+        }
+
+        const wName = document.getElementById('weapon-display');
+        const wAmmo = document.getElementById('ammo-display');
+        const weaponStats = this.weaponSystem.getWeaponStats();
+        const currentAmmo = this.weaponSystem.getAmmo();
+        if (wName) wName.textContent = weaponStats.name.toUpperCase();
+        if (wAmmo) wAmmo.textContent = weaponStats.ammo === -1 ? '∞' : currentAmmo.toString();
+
+        const speedo = document.getElementById('speedometer');
+        if (this.playerInVehicle) {
+            if (speedo) speedo.classList.add('active');
+            const currentVehicle = this.currentVehicle === 'bike' ? this.bike : (this.currentVehicle === 'traffic' ? this.occupiedTrafficCar! : this.vehicle);
+            const speed = currentVehicle.getSpeedKmh();
+            const sVal  = document.getElementById('speedo-value');
+            const gVal  = document.getElementById('gear-value');
+            if (sVal) sVal.textContent = speed.toString();
+            if (gVal) gVal.textContent = (currentVehicle as any).getGear ? `G${(currentVehicle as any).getGear()}` : 'G1';
+        } else {
+            if (speedo) speedo.classList.remove('active');
+        }
+    }
+
+    private handleBusted(dt: number) {
+        if (this.playerInVehicle) return;
+        for (const p of this.police) {
+            if (p.isDead) continue;
+            const dist = p.getPosition().distanceTo(this.player.getPosition());
+            const spd  = p.getSpeedKmh();
+            if (this.wantedLevel.getLevel() > 0 && dist < 4.5 && spd < 10) {
+                const screen = document.getElementById('pause-screen');
+                if (screen) {
+                    const h2 = screen.querySelector('h2');
+                    const pText = screen.querySelector('p');
+                    if (h2) { h2.textContent = 'BUSTED'; h2.style.color = '#00ccff'; }
+                    if (pText) pText.textContent = 'You were arrested by the Police';
+                    screen.classList.add('visible');
+                    this.paused = true;
+                }
+            }
+        }
+    }
+
     // ── Main loop ─────────────────────────────────────────────────────────────
     private animate(time: number) {
         requestAnimationFrame((t) => this.animate(t));
@@ -621,8 +675,9 @@ export class Core {
             this.player.setPosition(rv.getPosition().x + 3, rv.getPosition().y + 2, rv.getPosition().z);
         }
 
-        // Debounced wanted level decay (handled in WantedLevel.ts)
         this.wantedLevel.update(dt);
+        this.updateHUD(dt);
+        this.handleBusted(dt);
 
         // Handle bomb throwing (press B)
         if (Input.isKeyPressed('b') && !this.playerInVehicle) {

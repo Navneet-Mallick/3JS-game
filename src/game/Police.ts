@@ -54,52 +54,36 @@ export class Police extends TrafficCar {
         const policePos = this.getPosition();
         const distToPlayer = policePos.distanceTo(playerPosition);
 
-        // Detect player
         if (distToPlayer < this.DETECTION_RANGE) {
             this.isChasing = true;
             this.chaseTimer = 0;
         }
 
-        // Chase logic
         if (this.isChasing) {
             this.chaseTimer += dt;
-
-            // Give up chase after timeout
             if (this.chaseTimer > this.CHASE_TIMEOUT) {
-                this.isChasing = false;
-                this.chaseTimer = 0;
+                this.stopChase();
+                return;
             }
 
-            // Chase the player - boost speed
-            if (distToPlayer > 5) {
-                const body = this.chassisBody;
-                const vx = body.velocity.x;
-                const vz = body.velocity.z;
-                const spd = Math.sqrt(vx * vx + vz * vz);
-
-                // Apply boosted force when chasing
-                const force = spd < 15 ? 1800 * this.CHASE_SPEED_BOOST : 0;
-
-                body.velocity.x *= 0.98; // Slight damping
-                body.velocity.z *= 0.98;
-
-                // Direction to player
-                const direction = new THREE.Vector3()
-                    .subVectors(playerPosition, policePos)
-                    .normalize();
-
-                // Add chase force
-                body.velocity.x += direction.x * force * dt * 0.5;
-                body.velocity.z += direction.z * force * dt * 0.5;
-
-                // Limit max speed
-                const newSpeed = Math.sqrt(body.velocity.x ** 2 + body.velocity.z ** 2);
-                if (newSpeed > 45) {
-                    const scale = 45 / newSpeed;
-                    body.velocity.x *= scale;
-                    body.velocity.z *= scale;
-                }
+            const targetPos = playerPosition;
+            const myPos = this.getPosition();
+            
+            const toTarget = new THREE.Vector3().subVectors(targetPos, myPos).normalize();
+            const myFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as any);
+            const cross = myFwd.x * toTarget.z - myFwd.z * toTarget.x;
+            const steer = Math.max(-0.6, Math.min(0.6, -cross * 2.5));
+            
+            const currentSpeed = this.getSpeedKmh();
+            const force = currentSpeed < 50 ? 2500 : 0;
+            
+            this.currentSteeringValue = steer;
+            for (let i = 0; i < 4; i++) {
+                this.vehicle.applyEngineForce(force, i);
+                this.vehicle.setBrake(distToPlayer < 6 ? 1000 : 0, i);
             }
+            this.vehicle.setSteeringValue(steer, 0);
+            this.vehicle.setSteeringValue(steer, 1);
         }
     }
 
