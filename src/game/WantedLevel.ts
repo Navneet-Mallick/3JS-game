@@ -4,7 +4,7 @@ export class WantedLevel {
     private currentLevel = 0;
     private maxLevel = 5;
     private levelDecayTimer = 0;
-    private readonly DECAY_RATE = 0.5; // seconds per level
+    private readonly DECAY_RATE = 20.0; // 20 seconds per level
     private mesh: THREE.Group;
 
     constructor(scene: THREE.Scene) {

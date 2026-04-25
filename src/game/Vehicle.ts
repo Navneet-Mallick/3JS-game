@@ -57,10 +57,8 @@ export class Vehicle {
         const chassisShape = new CANNON.Box(new CANNON.Vec3(1.0, 0.3, 2.2));
         this.chassisBody = new CANNON.Body({ mass: 1200, shape: chassisShape });
         this.chassisBody.position.set(position.x, position.y + 1.2, position.z);
-        this.chassisBody.linearDamping  = 0.01;  // Very low damping for better responsiveness
-        this.chassisBody.angularDamping = 0.2;   // Lower for better turning
-        this.chassisBody.allowSleep = false;     // Prevent sleeping which can cause stuck vehicles
-        this.chassisBody.sleepSpeedLimit = 0.1;  // Very low threshold
+        this.chassisBody.linearDamping  = 0.2; // Solid feel
+        this.chassisBody.angularDamping = 0.8; // Prevent excessive spinning
         world.addBody(this.chassisBody);
 
         this.chassisMesh = this.buildCarModel();
@@ -76,24 +74,24 @@ export class Vehicle {
         const wheelOpts = {
             radius:                         0.38,
             directionLocal:                 new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness:            40,   // Increased for better response
-            suspensionRestLength:           0.3,  // Slightly lower for better ground contact
-            frictionSlip:                   3.5,  // Higher grip for better control
-            dampingRelaxation:              2.3,  // Better response
-            dampingCompression:             4.4,  // Better compression
-            maxSuspensionForce:             150000, // Higher force for responsiveness
-            rollInfluence:                  0.01,
-            axleLocal:                      new CANNON.Vec3(1, 0, 0),
-            chassisConnectionPointLocal:    new CANNON.Vec3(1, 1, 0),
+            suspensionStiffness: 35, // Softer for "luxury" feel
+            suspensionRestLength: 0.35,
+            frictionSlip: 5.0, 
+            dampingRelaxation: 3.5, // Much more damping for smoothness
+            dampingCompression: 5.5,
+            maxSuspensionForce: 150000,
+            rollInfluence: 0.002, // Almost zero to prevent jittery flipping
+            axleLocal: new CANNON.Vec3(1, 0, 0),
+            chassisConnectionPointLocal: new CANNON.Vec3(0, 0, 0),
             maxSuspensionTravel:            0.3,  // Tighter travel for better control
             customSlidingFrictionWheelStep: 1,
         };
 
         const wPos = [
-            [-0.95, -0.1,  1.5],
-            [ 0.95, -0.1,  1.5],
-            [-0.95, -0.1, -1.5],
-            [ 0.95, -0.1, -1.5]
+            [-0.85, -0.2,  1.4],
+            [ 0.85, -0.2,  1.4],
+            [-0.85, -0.2, -1.4],
+            [ 0.85, -0.2, -1.4]
         ];
         wPos.forEach(([x, y, z]) => {
             wheelOpts.chassisConnectionPointLocal.set(x, y, z);
@@ -194,25 +192,28 @@ export class Vehicle {
         }
 
         const gearRatio    = this.GEAR_RATIOS[this.gear] ?? 1;
-        const ENGINE_FORCE = 3000 * gearRatio * this.speedBoostMultiplier; // Increased for better response
-        const BRAKE_FORCE  = 150;
-        const MAX_STEER    = Math.max(0.35, 0.7 - spd * 0.004);
+        const ENGINE_FORCE = 3500 * gearRatio * this.speedBoostMultiplier; 
+        const MAX_STEER    = Math.max(0.3, 0.6 - spd * 0.0035);
 
         let force = 0, steer = 0, brake = 0;
         let handbrake = false, throttle = false;
 
         if (this.isOccupied) {
             // Keyboard controls
-            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    { force =  ENGINE_FORCE; throttle = true; }
-            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  { force = -ENGINE_FORCE * 0.6; }
-            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  steer =  MAX_STEER;
+            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup')) { force = ENGINE_FORCE; throttle = true; }
+            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown')) { 
+                if (spd > 5) brake = 1500;
+                else force = -ENGINE_FORCE * 0.6; 
+            }
+            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft')) steer = MAX_STEER;
             if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
-            handbrake = Input.isKeyDown(' ');
+            
+            if (Input.isKeyDown(' ')) brake = 2500;
             
             // Touch controls
             if (TouchControls.active) {
                 if (TouchControls.gasPressed) { force = ENGINE_FORCE; throttle = true; }
-                if (TouchControls.brakePressed) { force = -ENGINE_FORCE * 0.6; }
+                if (TouchControls.brakePressed) { brake = 2500; }
                 if (Math.abs(TouchControls.moveX) > 0.1) {
                     steer = -TouchControls.moveX * MAX_STEER;
                 }
@@ -221,13 +222,12 @@ export class Vehicle {
             // Gamepad controls
             if (GamepadInput.connected) {
                 if (GamepadInput.rt > 0.05) { force =  ENGINE_FORCE * GamepadInput.rt; throttle = true; }
-                if (GamepadInput.lt > 0.05)   force = -ENGINE_FORCE * GamepadInput.lt * 0.6;
+                if (GamepadInput.lt > 0.05)   brake = 2500 * GamepadInput.lt;
                 if (Math.abs(GamepadInput.leftX) > 0.05) steer = -GamepadInput.leftX * MAX_STEER;
-                if (GamepadInput.btnLB) handbrake = true;
+                if (GamepadInput.btnLB) brake = 2500;
             }
 
-            const braking = Input.isKeyDown('s') || Input.isKeyDown('arrowdown') || handbrake || TouchControls.brakePressed;
-            this.taillightMats.forEach(m => m.emissive.setHex(braking ? 0xff4400 : 0x550000));
+            this.taillightMats.forEach(m => m.emissive.setHex(brake > 0 ? 0xff4400 : 0x550000));
 
             this.sound.updateEngine(spd * 0.5, throttle);
             this.updateCamera(dt);
@@ -239,7 +239,6 @@ export class Vehicle {
         }
 
         // Lateral speed for drift detection
-        // FIX: clone _vel before the multiplyScalar mutation so the result is correct
         _carFwd.set(0, 0, 1).applyQuaternion(
             this.chassisBody.quaternion as unknown as THREE.Quaternion
         );
@@ -249,22 +248,19 @@ export class Vehicle {
             .length();
 
         // Smooth steering
-        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 15 * dt);
+        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 8 * dt);
 
         // Apply forces
         this.vehicle.applyEngineForce(force, 2);
         this.vehicle.applyEngineForce(force, 3);
+        // Apply Aerodynamic Downforce (keep it glued at speed)
+        const downforce = spd * 100;
+        this.chassisBody.applyForce(new CANNON.Vec3(0, -downforce, 0), new CANNON.Vec3(0, 0, 0));
+
         this.vehicle.setSteeringValue(this.currentSteeringValue, 0);
         this.vehicle.setSteeringValue(this.currentSteeringValue, 1);
 
-        if (handbrake) {
-            this.vehicle.setBrake(0, 0);
-            this.vehicle.setBrake(0, 1);
-            this.vehicle.setBrake(BRAKE_FORCE * 5, 2);
-            this.vehicle.setBrake(BRAKE_FORCE * 5, 3);
-        } else {
-            for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i);
-        }
+        for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i);
 
         // ── Soft Y-floor ─────────────────────────────────────────────────────
         // Replaces the old hard teleport clamp. Gently lifts the chassis when
@@ -279,13 +275,15 @@ export class Vehicle {
         // If the player has been holding throttle but the car isn't moving,
         // it is physics-stuck (wedged against geometry or pinned by gravity).
         // After 1.5 s we fire a small upward impulse to break it free.
-        if (this.isOccupied && throttle && spd < 4) {
+        if (this.isOccupied && throttle && spd < 5) {
             this.stuckTimer += dt;
-            if (this.stuckTimer > 1.0) {
+            if (this.stuckTimer > 0.8) { // Faster trigger
                 this.chassisBody.applyImpulse(
-                    new CANNON.Vec3(0, 3500, 0),
+                    new CANNON.Vec3(0, 4500, 0),
                     new CANNON.Vec3(0, 0, 0)
                 );
+                // Also give a tiny rotation nudge to un-wedge
+                this.chassisBody.angularVelocity.set(0, 2, 0);
                 this.stuckTimer = 0;
             }
         } else {

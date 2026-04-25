@@ -27,6 +27,10 @@ export class CheatSystem {
         'YOUWONTTAKEMEALIVE': () => this.superJumpCheat(),
         'CHASESTAT': () => this.maxWantedCheat(),
         'WEAPONSFORALL': () => this.weaponsCheat(),
+        'NUTTERTOOLS': () => this.weaponsCheatHeavy(),
+        'THUGSTOOLS': () => this.weaponsCheatBasic(),
+        'PROFESSIONALTOOLS': () => this.weaponsCheatPro(),
+        'PANZER': () => this.spawnTankCheat(),
         'BOMBSAWAY': () => this.bombsCheat(),
         'GUNRUNNER': () => this.switchToPistol(),
         'SHOTGUNNER': () => this.switchToShotgun(),
@@ -156,7 +160,32 @@ export class CheatSystem {
 
     private weaponsCheat() {
         this.weaponSystem.fullAmmo();
-        this.sound.playReload();
+        this.sound.playPowerUp();
+    }
+
+    private weaponsCheatBasic() {
+        this.weaponSystem.switchWeapon(WeaponType.PISTOL);
+        this.weaponSystem.fullAmmo();
+        this.sound.playPowerUp();
+    }
+
+    private weaponsCheatPro() {
+        this.weaponSystem.switchWeapon(WeaponType.RIFLE);
+        this.weaponSystem.fullAmmo();
+        this.sound.playPowerUp();
+    }
+
+    private weaponsCheatHeavy() {
+        this.weaponSystem.switchWeapon(WeaponType.MINIGUN);
+        this.weaponSystem.fullAmmo();
+        this.sound.playPowerUp();
+    }
+
+    private spawnTankCheat() {
+        // Spawn a very heavy vehicle (represented by the supercar mesh for now)
+        this.vehicle.chassisBody.mass = 5000;
+        this.vehicle.chassisBody.updateMassProperties();
+        this.sound.playPowerUp();
     }
 
     private bombsCheat() {

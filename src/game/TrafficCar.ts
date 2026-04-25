@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { Input } from './Input';
+import { TouchControls } from './TouchControls';
+import { GamepadInput } from './Gamepad';
 
 const COLORS = [0x8b0000, 0x003366, 0x1a4a1a, 0x4a3000, 0x2a0050, 0x444444, 0x660033];
 
@@ -44,6 +47,17 @@ export class TrafficCar {
     private lastPos = new THREE.Vector3();
     public health = 100;
     public isDead = false;
+    public isOccupied = false;
+    public lateralSpeed = 0;
+
+    // Camera and Input
+    private camera: THREE.PerspectiveCamera | null = null;
+    private camYaw = Math.PI;
+    private camPitch = 0.28;
+    private readonly CAM_DIST = 10;
+    private mouseIdleTimer = 0;
+    private gear = 1;
+    private currentSteeringValue = 0;
 
     constructor(scene: THREE.Scene, world: CANNON.World, position: CANNON.Vec3) {
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];
@@ -138,6 +152,13 @@ export class TrafficCar {
         return g;
     }
 
+    public initCamera(camera: THREE.PerspectiveCamera, yaw: number, pitch: number) {
+        this.camera = camera;
+        this.camYaw = yaw;
+        this.camPitch = Math.max(0.05, Math.min(0.6, pitch));
+        this.mouseIdleTimer = 0;
+    }
+
     public update(dt: number) {
         if (this.isDead) {
             this.vehicle.applyEngineForce(0, 0);
@@ -148,52 +169,70 @@ export class TrafficCar {
             return;
         }
 
-        const pos = this.chassisBody.position;
-        const curPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+        const spd = this.getSpeedKmh();
+        let force = 0, steer = 0, brake = 0;
+        let throttle = false;
 
-        // Stuck detection — if barely moved in 1s, pick new waypoint
-        this.stuckTimer += dt;
-        if (this.stuckTimer > 1.0) {
-            if (curPos.distanceTo(this.lastPos) < 1.0) {
-                this.waypoint = randomWaypoint();
-                // Give a small nudge
-                this.chassisBody.velocity.set(
-                    (Math.random() - 0.5) * 6,
-                    0,
-                    (Math.random() - 0.5) * 6
-                );
+        if (this.isOccupied && this.camera) {
+            const ENGINE_FORCE = 3000;
+            const MAX_STEER = Math.max(0.35, 0.7 - spd * 0.004);
+
+            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup')) { force = ENGINE_FORCE; throttle = true; }
+            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown')) { force = -ENGINE_FORCE * 0.6; }
+            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft')) steer = MAX_STEER;
+            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
+            
+            if (TouchControls.active) {
+                if (TouchControls.gasPressed) { force = ENGINE_FORCE; throttle = true; }
+                if (TouchControls.brakePressed) { force = -ENGINE_FORCE * 0.6; }
+                if (Math.abs(TouchControls.moveX) > 0.1) steer = -TouchControls.moveX * MAX_STEER;
             }
-            this.lastPos.copy(curPos);
-            this.stuckTimer = 0;
+
+            if (GamepadInput.connected) {
+                if (GamepadInput.rt > 0.05) { force = ENGINE_FORCE * GamepadInput.rt; throttle = true; }
+                if (GamepadInput.lt > 0.05) force = -ENGINE_FORCE * GamepadInput.lt * 0.6;
+                if (Math.abs(GamepadInput.leftX) > 0.05) steer = -GamepadInput.leftX * MAX_STEER;
+            }
+
+            this.updateCamera(dt);
+            this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 15 * dt);
+            
+            this.vehicle.applyEngineForce(force, 2);
+            this.vehicle.applyEngineForce(force, 3);
+            this.vehicle.setSteeringValue(this.currentSteeringValue, 0);
+            this.vehicle.setSteeringValue(this.currentSteeringValue, 1);
+            for (let i = 0; i < 4; i++) this.vehicle.setBrake(Input.isKeyDown(' ') ? 500 : 0, i);
+
+            // Lateral speed for drift
+            const carFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as any);
+            const vel = new THREE.Vector3(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
+            this.lateralSpeed = vel.clone().sub(carFwd.clone().multiplyScalar(vel.dot(carFwd))).length();
+
+        } else {
+            // AI control logic
+            const pos = this.chassisBody.position;
+            const curPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+
+            // Reached waypoint → pick next road waypoint
+            const flatDist = new THREE.Vector2(pos.x - this.waypoint.x, pos.z - this.waypoint.z).length();
+            if (flatDist < 8) {
+                this.waypoint = randomWaypoint();
+            }
+
+            // Steering toward waypoint
+            const toWP = new THREE.Vector3(this.waypoint.x - pos.x, 0, this.waypoint.z - pos.z).normalize();
+            const carFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as any);
+            const cross = carFwd.x * toWP.z - carFwd.z * toWP.x;
+            const steerVal = Math.max(-0.45, Math.min(0.45, -cross * 1.8));
+
+            const aiForce = spd < 11 ? 1200 : 0;
+
+            this.vehicle.applyEngineForce(aiForce, 2);
+            this.vehicle.applyEngineForce(aiForce, 3);
+            this.vehicle.setSteeringValue(steerVal, 0);
+            this.vehicle.setSteeringValue(steerVal, 1);
+            for (let i = 0; i < 4; i++) this.vehicle.setBrake(0, i);
         }
-
-        // Reached waypoint → pick next road waypoint
-        const flatDist = new THREE.Vector2(pos.x - this.waypoint.x, pos.z - this.waypoint.z).length();
-        if (flatDist < 8) {
-            this.waypoint = randomWaypoint();
-        }
-
-        // Steering toward waypoint
-        const toWP = new THREE.Vector3(this.waypoint.x - pos.x, 0, this.waypoint.z - pos.z).normalize();
-        const carFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(
-            this.chassisBody.quaternion as unknown as THREE.Quaternion
-        );
-        const cross = carFwd.x * toWP.z - carFwd.z * toWP.x; // signed angle
-        const steer = Math.max(-0.45, Math.min(0.45, -cross * 1.8));
-
-        const vx = this.chassisBody.velocity.x;
-        const vz = this.chassisBody.velocity.z;
-        const spd = Math.sqrt(vx * vx + vz * vz);
-        const force = spd < 11 ? 1200 : 0;
-
-        this.vehicle.applyEngineForce(force, 2);
-        this.vehicle.applyEngineForce(force, 3);
-        this.vehicle.setSteeringValue(steer, 0);
-        this.vehicle.setSteeringValue(steer, 1);
-        this.vehicle.setBrake(0, 0);
-        this.vehicle.setBrake(0, 1);
-        this.vehicle.setBrake(0, 2);
-        this.vehicle.setBrake(0, 3);
 
         this.chassisMesh.position.copy(this.chassisBody.position as unknown as THREE.Vector3);
         this.chassisMesh.quaternion.copy(this.chassisBody.quaternion as unknown as THREE.Quaternion);
@@ -207,6 +246,48 @@ export class TrafficCar {
     }
 
     public getPosition() { return this.chassisMesh.position; }
+    public getSpeedKmh(): number {
+        const v = this.chassisBody.velocity;
+        return Math.round(Math.sqrt(v.x * v.x + v.z * v.z) * 3.6);
+    }
+    public getGear() { return this.gear; }
+
+    private updateCamera(dt: number) {
+        if (!this.camera) return;
+        const { Input } = require('./Input');
+        if (Input.movementX !== 0 || Input.movementY !== 0) {
+            this.camYaw -= Input.movementX * 0.003;
+            this.camPitch -= Input.movementY * 0.003;
+            this.camPitch = Math.max(0.05, Math.min(0.6, this.camPitch));
+            this.mouseIdleTimer = 1.8;
+        }
+
+        if (this.mouseIdleTimer > 0) {
+            this.mouseIdleTimer -= dt;
+        } else {
+            const carFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as any);
+            const targetYaw = Math.atan2(carFwd.x, carFwd.z) + Math.PI;
+            let diff = targetYaw - this.camYaw;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            this.camYaw += diff * Math.min(1, 3 * dt);
+        }
+
+        const dynDist = this.CAM_DIST + this.getSpeedKmh() * 0.05;
+        const target = new THREE.Vector3(this.chassisMesh.position.x, this.chassisMesh.position.y + 1.2, this.chassisMesh.position.z);
+        const pos = new THREE.Vector3(
+            target.x + dynDist * Math.sin(this.camYaw) * Math.cos(this.camPitch),
+            target.y + dynDist * Math.sin(this.camPitch),
+            target.z + dynDist * Math.cos(this.camYaw) * Math.cos(this.camPitch)
+        );
+        this.camera.position.lerp(pos, 0.15);
+        this.camera.lookAt(target);
+    }
+
+    public setVisible(v: boolean) {
+        this.chassisMesh.visible = v;
+        this.wheelMeshes.forEach(w => w.visible = v);
+    }
 
     public takeDamage(damage: number): boolean {
         if (this.isDead) return false;

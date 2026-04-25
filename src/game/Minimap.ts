@@ -75,8 +75,6 @@ export class Minimap {
         ctx.save();
         ctx.translate(cx, cy);
         ctx.fillStyle = '#ff0055';
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = '#ff0055';
         ctx.beginPath();
         ctx.moveTo(0, -7);
         ctx.lineTo(5, 5);

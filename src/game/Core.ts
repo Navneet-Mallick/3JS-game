@@ -47,7 +47,8 @@ export class Core {
 
     private lastTime        = 0;
     private playerInVehicle = false;
-    private currentVehicle: 'car' | 'bike' | null = null; // Track which vehicle
+    private currentVehicle: 'car' | 'bike' | 'traffic' | null = null; // Track which vehicle
+    private occupiedTrafficCar: TrafficCar | null = null;
     private paused          = false;
     private enterExitCooldown = 0; // FIX: debounce enter/exit so rapid F-presses can't corrupt state
 
@@ -249,6 +250,10 @@ export class Core {
         let hitSomething = false;
         let hitPosition: THREE.Vector3 | null = null;
         
+        // Muzzle flash and tracer effects
+        this.createMuzzleFlash(origin, direction);
+        this.createTracer(origin, direction, range);
+        
         for (let i = 0; i < this.pedestrians.length; i++) {
             const ped = this.pedestrians[i];
             if (ped.isDead || !ped.mesh.visible) continue;
@@ -308,61 +313,73 @@ export class Core {
     
     // ── Visual Effects ────────────────────────────────────────────────────────
     private createMuzzleFlash(origin: THREE.Vector3, direction: THREE.Vector3) {
-        const flash = new THREE.Mesh(
-            new THREE.SphereGeometry(0.15, 8, 8),
-            new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.8 })
-        );
+        const flashGeo = new THREE.SphereGeometry(0.2, 8, 8);
+        const flashMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+        const flash = new THREE.Mesh(flashGeo, flashMat);
+        
         flash.position.copy(origin).add(direction.clone().multiplyScalar(0.5));
         this.scene.getScene().add(flash);
         
-        // Remove after 50ms using requestAnimationFrame (more efficient)
-        const startTime = performance.now();
-        const checkRemove = () => {
-            if (performance.now() - startTime > 50) {
-                this.scene.getScene().remove(flash);
-            } else {
-                requestAnimationFrame(checkRemove);
-            }
+        let life = 1.0;
+        const animate = () => {
+            life -= 0.2;
+            flash.scale.setScalar(life * 2);
+            if (life > 0) requestAnimationFrame(animate);
+            else this.scene.getScene().remove(flash);
         };
-        requestAnimationFrame(checkRemove);
+        animate();
     }
-    
+
+    private createTracer(origin: THREE.Vector3, direction: THREE.Vector3, range: number) {
+        const tracerGeo = new THREE.BoxGeometry(0.04, 0.04, 2);
+        const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 });
+        const tracer = new THREE.Mesh(tracerGeo, tracerMat);
+        
+        tracer.position.copy(origin).add(direction.clone().multiplyScalar(4));
+        tracer.lookAt(origin.clone().add(direction.clone().multiplyScalar(10)));
+        this.scene.getScene().add(tracer);
+        
+        let life = 1.0;
+        const speed = 2.5;
+        const animate = () => {
+            life -= 0.04;
+            tracer.position.add(direction.clone().multiplyScalar(speed));
+            tracer.scale.z = life * 3;
+            if (life > 0) requestAnimationFrame(animate);
+            else this.scene.getScene().remove(tracer);
+        };
+        animate();
+    }
+
     private createBloodEffect(position: THREE.Vector3) {
-        // Reduced to 3 particles for performance
-        for (let i = 0; i < 3; i++) {
-            const particle = new THREE.Mesh(
-                new THREE.SphereGeometry(0.05, 4, 4),
-                new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        // High-quality multi-particle blood
+        for (let i = 0; i < 6; i++) {
+            const p = new THREE.Mesh(
+                new THREE.BoxGeometry(0.1, 0.1, 0.1),
+                new THREE.MeshBasicMaterial({ color: 0xaa0000 })
             );
-            particle.position.copy(position);
-            particle.position.y += Math.random() * 0.5;
-            this.scene.getScene().add(particle);
-            
-            // Animate and remove
-            const velocity = new THREE.Vector3(
-                (Math.random() - 0.5) * 2,
-                Math.random() * 2,
-                (Math.random() - 0.5) * 2
+            p.position.copy(position);
+            this.scene.getScene().add(p);
+
+            const vel = new THREE.Vector3(
+                (Math.random() - 0.5) * 3,
+                Math.random() * 4,
+                (Math.random() - 0.5) * 3
             );
-            
-            let life = 0;
-            const maxLife = 0.5;
-            const startTime = performance.now();
-            
+
+            let life = 1.0;
             const animate = () => {
-                const elapsed = (performance.now() - startTime) / 1000;
-                if (elapsed > maxLife) {
-                    this.scene.getScene().remove(particle);
-                    return; // Stop loop
-                }
-                particle.position.add(velocity.clone().multiplyScalar(0.016));
-                velocity.y -= 9.8 * 0.016; // Gravity
-                requestAnimationFrame(animate);
+                life -= 0.03;
+                vel.y -= 0.15; // gravity
+                p.position.add(vel.clone().multiplyScalar(0.016));
+                p.scale.setScalar(life);
+                if (life > 0) requestAnimationFrame(animate);
+                else this.scene.getScene().remove(p);
             };
             animate();
         }
     }
-    
+
     private showHitMarker() {
         const marker = document.getElementById('hit-marker');
         if (!marker) return;
@@ -390,7 +407,7 @@ export class Core {
             // ═══ EXIT VEHICLE ═══
             this.playerInVehicle = false;
             
-            const currentVehicle = this.currentVehicle === 'bike' ? this.bike : this.vehicle;
+            const currentVehicle = this.currentVehicle === 'bike' ? this.bike : (this.currentVehicle === 'traffic' ? this.occupiedTrafficCar! : this.vehicle);
             const vBody = currentVehicle.chassisBody;
             
             // FIX: use physics body position (accurate) not mesh position (may lag one frame)
@@ -411,7 +428,12 @@ export class Core {
             
             // Update states
             this.player.setInVehicle(false);
-            currentVehicle.isOccupied = false;
+            if (this.currentVehicle === 'traffic') {
+                this.occupiedTrafficCar!.isOccupied = false;
+                this.occupiedTrafficCar = null;
+            } else {
+                currentVehicle.isOccupied = false;
+            }
             currentVehicle.setVisible(true);
             this.currentVehicle = null;
 
@@ -445,25 +467,54 @@ export class Core {
                 this.enterVehicle('bike');
                 return;
             }
+
+            // Check all traffic cars
+            for (const t of this.traffic) {
+                const tp = t.getPosition();
+                _dp.set(pp.x - tp.x, pp.y - tp.y, pp.z - tp.z);
+                if (_dp.lengthSq() < 25) {
+                    this.occupiedTrafficCar = t;
+                    this.enterVehicle('traffic');
+                    return;
+                }
+            }
+
+            // Check all police cars
+            for (const p of this.police) {
+                const pp2 = p.getPosition();
+                _dp.set(pp.x - pp2.x, pp.y - pp2.y, pp.z - pp2.z);
+                if (_dp.lengthSq() < 25) {
+                    this.occupiedTrafficCar = p;
+                    this.enterVehicle('traffic');
+                    return;
+                }
+            }
         }
     }
     
-    private enterVehicle(type: 'car' | 'bike') {
+    private enterVehicle(type: 'car' | 'bike' | 'traffic') {
         this.playerInVehicle = true;
         this.currentVehicle = type;
         
-        const vehicle = type === 'bike' ? this.bike : this.vehicle;
+        const vehicle = type === 'bike' ? this.bike : (type === 'traffic' ? this.occupiedTrafficCar! : this.vehicle);
         
         // Wake up vehicle physics
         vehicle.chassisBody.wakeUp();
         
-        // FIX: seed the vehicle camera from the player's current yaw/pitch so there is
-        //      no jarring snap when the camera transitions from player to vehicle view.
-        vehicle.initCamera(this.player.getYaw() + Math.PI, 0.28);
+        // FIX: seed the vehicle camera from the player's current yaw/pitch
+        if (type === 'traffic') {
+            this.occupiedTrafficCar!.initCamera(this.scene.getCamera(), this.player.getYaw() + Math.PI, 0.28);
+        } else {
+            (vehicle as any).initCamera(this.player.getYaw() + Math.PI, 0.28);
+        }
         
         // Update states
         this.player.setInVehicle(true);
-        vehicle.isOccupied = true;
+        if (type === 'traffic') {
+            this.occupiedTrafficCar!.isOccupied = true;
+        } else {
+            (vehicle as any).isOccupied = true;
+        }
         vehicle.setVisible(true);
 
         // UI updates
@@ -560,7 +611,7 @@ export class Core {
                 this.vehicle.resetPosition();
             }
             // Move player alongside the reset vehicle
-            const rv = this.currentVehicle === 'bike' ? this.bike : this.vehicle;
+            const rv = this.currentVehicle === 'bike' ? this.bike : (this.currentVehicle === 'traffic' ? this.occupiedTrafficCar! : this.vehicle);
             this.player.setPosition(rv.getPosition().x + 3, rv.getPosition().y + 2, rv.getPosition().z);
         }
 
@@ -633,7 +684,7 @@ export class Core {
         // isn't enough (e.g. very high speed launches over the city edge).
         const WORLD_LIMIT = 230;
         if (this.playerInVehicle) {
-            const cv = this.currentVehicle === 'bike' ? this.bike : this.vehicle;
+            const cv = this.currentVehicle === 'bike' ? this.bike : (this.currentVehicle === 'traffic' ? this.occupiedTrafficCar! : this.vehicle);
             const cp = cv.chassisBody.position;
             if (Math.abs(cp.x) > WORLD_LIMIT || Math.abs(cp.z) > WORLD_LIMIT) {
                 cv.resetPosition();
@@ -673,9 +724,31 @@ export class Core {
             if (_dp.lengthSq() < 10000) p.update(dt, playerPos); // 100²
         }
 
-        // Police update
+        // Police update and active spawning
         this.wantedLevel.update(dt);
         this.crimeSystem.update(dt);
+        
+        const isWanted = this.wantedLevel.isWanted();
+        for (let i = 0; i < this.police.length; i++) {
+            const p = this.police[i];
+            const pPos = p.getPosition();
+            const dSq = pPos.distanceToSquared(playerPos);
+            
+            // If wanted and police is too far away (> 200m), respawn it near the player
+            if (isWanted && dSq > 40000) { // 200²
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 60 + Math.random() * 40;
+                const rx = playerPos.x + Math.sin(angle) * dist;
+                const rz = playerPos.z + Math.cos(angle) * dist;
+                p.chassisBody.position.set(rx, 5, rz);
+                p.chassisBody.velocity.set(0, 0, 0);
+                p.stopChase();
+            }
+            
+            if (dSq < 32400) { // 180²
+                p.update(dt, playerPos, isWanted);
+            }
+        }
 
         // Check for crimes
         if (this.playerInVehicle) {
@@ -700,23 +773,22 @@ export class Core {
             }
         }
         
-        // Police chase logic - chase if wanted level > 0 (on foot OR in vehicle)
-        const isWanted = this.wantedLevel.isWanted();
-        for (let i = 0; i < this.police.length; i++) {
-            const p = this.police[i];
-            _dp.set(
-                p.getPosition().x - playerPos.x,
-                0,
-                p.getPosition().z - playerPos.z
-            );
-            if (_dp.lengthSq() < 25600) { // 160² - larger range for police
-                p.update(dt, playerPos, isWanted); // Chase if wanted, regardless of vehicle
-            }
-        }
+        // Remove police update from here as it's merged above
 
-        // Pedestrian update (only one loop needed)
-        for (let i = 0; i < this.pedestrians.length; i++) {
+        // Pedestrian update (with cleanup of dead ones)
+        for (let i = this.pedestrians.length - 1; i >= 0; i--) {
             const p = this.pedestrians[i];
+            
+            // If dead and player is far away, remove from scene
+            if (p.isDead) {
+                const distSq = p.getPosition().distanceToSquared(playerPos);
+                if (distSq > 2500) { // 50m
+                    this.scene.getScene().remove(p.mesh);
+                    this.pedestrians.splice(i, 1);
+                    continue;
+                }
+            }
+
             _dp.set(
                 p.getPosition().x - playerPos.x,
                 0,
@@ -725,6 +797,17 @@ export class Core {
             const near = _dp.lengthSq() < 10000; // 100²
             p.mesh.visible = near;
             if (near) p.update(dt, playerPos);
+        }
+        
+        // Spawn new pedestrians if count is low
+        if (this.pedestrians.length < 12 && Math.random() < 0.01) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 50 + Math.random() * 30;
+            this.pedestrians.push(new Pedestrian(
+                this.scene.getScene(),
+                null,
+                new THREE.Vector3(playerPos.x + Math.sin(angle) * dist, 0, playerPos.z + Math.cos(angle) * dist)
+            ));
         }
 
         // Update bombs
@@ -738,11 +821,11 @@ export class Core {
 
         // Speedometer
         if (this.playerInVehicle) {
-            const currentVehicle = this.currentVehicle === 'bike' ? this.bike : this.vehicle;
+            const currentVehicle = this.currentVehicle === 'bike' ? this.bike : (this.currentVehicle === 'traffic' ? this.occupiedTrafficCar! : this.vehicle);
             if (this.speedoEl) this.speedoEl.textContent = String(currentVehicle.getSpeedKmh());
             if (this.gearEl) {
-                // Bike doesn't have gears
-                this.gearEl.textContent = this.currentVehicle === 'bike' ? '' : `G${this.vehicle.getGear()}`;
+                // Bike and traffic cars don't have complex gear UI here yet
+                this.gearEl.textContent = (this.currentVehicle === 'bike' || this.currentVehicle === 'traffic') ? '' : `G${this.vehicle.getGear()}`;
             }
         }
 
@@ -784,7 +867,22 @@ export class Core {
                 _dp.set(pp.x - bp.x, pp.y - bp.y, pp.z - bp.z);
                 const nearBike = _dp.lengthSq() < 25;
 
-                this.enterPrompt.style.display = (nearCar || nearBike) ? 'flex' : 'none';
+                let nearTraffic = false;
+                for (const t of this.traffic) {
+                    const tp = t.getPosition();
+                    _dp.set(pp.x - tp.x, pp.y - tp.y, pp.z - tp.z);
+                    if (_dp.lengthSq() < 25) { nearTraffic = true; break; }
+                }
+                
+                if (!nearTraffic) {
+                    for (const p of this.police) {
+                        const pp2 = p.getPosition();
+                        _dp.set(pp.x - pp2.x, pp.y - pp2.y, pp.z - pp2.z);
+                        if (_dp.lengthSq() < 25) { nearTraffic = true; break; }
+                    }
+                }
+
+                this.enterPrompt.style.display = (nearCar || nearBike || nearTraffic) ? 'flex' : 'none';
             } else {
                 this.enterPrompt.style.display = 'none';
             }

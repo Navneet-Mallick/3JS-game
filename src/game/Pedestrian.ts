@@ -14,6 +14,7 @@ export class Pedestrian {
     private targetZ    = 0;
     private wanderTimer = 0;
     private isAlive    = true;
+    private deathAnimTimer = 0;
 
     // Shared geometry + materials across all pedestrians
     private static _bodyGeo = new THREE.BoxGeometry(0.5, 0.8, 0.3);
@@ -58,8 +59,18 @@ export class Pedestrian {
 
     // Throttled update — called only when near player (LOD in Core)
     public update(dt: number, playerPos: THREE.Vector3) {
-        if (!this.isAlive || this.isDead) {
-            this.mesh.visible = false;
+        if (this.isDead) {
+            if (this.deathAnimTimer < 1.0) {
+                this.deathAnimTimer += dt;
+                // Smooth fall to side/back
+                this.mesh.rotation.x = Math.min(Math.PI / 2, this.deathAnimTimer * 2.5);
+                this.mesh.position.y = Math.max(0.3, 0.8 - this.deathAnimTimer * 0.5);
+            } else if (this.deathAnimTimer < 5.0) {
+                this.deathAnimTimer += dt;
+            } else {
+                this.isAlive = false;
+                this.mesh.visible = false;
+            }
             return;
         }
 
@@ -112,10 +123,7 @@ export class Pedestrian {
         if (this.health <= 0) {
             this.health = 0;
             this.isDead = true;
-            this.isAlive = false;
-            // Simple death animation - fall down
-            this.mesh.rotation.x = Math.PI / 2;
-            this.mesh.position.y = 0.3;
+            this.deathAnimTimer = 0;
             return true; // Killed
         }
         return false; // Damaged but alive

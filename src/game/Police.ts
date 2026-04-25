@@ -38,12 +38,15 @@ export class Police extends TrafficCar {
         // Call parent update for normal traffic behavior
         super.update(dt);
 
-        // If player position provided and player is wanted, chase
-        if (playerPosition && isWanted) {
-            this.updateChase(dt, playerPosition);
-        } else if (this.isChasing) {
-            // Stop chasing if player is no longer wanted
-            this.stopChase();
+        // Only use AI logic if NOT occupied by player
+        if (!this.isOccupied) {
+            // If player position provided and player is wanted, chase
+            if (playerPosition && isWanted) {
+                this.updateChase(dt, playerPosition);
+            } else if (this.isChasing) {
+                // Stop chasing if player is no longer wanted
+                this.stopChase();
+            }
         }
     }
 

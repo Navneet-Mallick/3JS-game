@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Input } from './Input';
 import { WeaponSystem } from './WeaponSystem';
@@ -13,6 +13,13 @@ const _camPos    = new THREE.Vector3();
 const _lookDir   = new THREE.Vector3();
 const _headPos   = new THREE.Vector3();
 const _euler     = new THREE.Euler();
+const _dtVec     = new THREE.Vector3();
+
+export enum CharacterType {
+    TOMMY = 'TOMMY',
+    CJ = 'CJ',
+    CLAUDE = 'CLAUDE'
+}
 
 export class Player {
     private scene:  THREE.Scene;
@@ -43,6 +50,8 @@ export class Player {
     private readonly MIN_PITCH  = 0.1;
     private readonly MAX_PITCH  = 0.7;
     private firstPerson = false;
+    private characterType: CharacterType = CharacterType.TOMMY;
+    private characterMeshes: Map<string, THREE.Mesh> = new Map();
 
     private playerInVehicle = false;
     private cheatBuffer  = '';
@@ -92,90 +101,64 @@ export class Player {
     }
 
     // ── Tommy Vercetti model ──────────────────────────────────────────────────
+    // ── Build Character Model ────────────────────────────────────────────────
     private buildModel(): THREE.Group {
         const g = new THREE.Group();
+        this.characterMeshes.clear();
 
-        const skin   = new THREE.MeshLambertMaterial({ color: 0xc8845a });
-        const hair   = new THREE.MeshLambertMaterial({ color: 0x120a00 });
-        const shirt  = new THREE.MeshLambertMaterial({ color: 0x2ab8b0 });
-        const shirtD = new THREE.MeshLambertMaterial({ color: 0x1e8a84 });
-        const pants  = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
-        const shoes  = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
-        const eyeM   = new THREE.MeshLambertMaterial({ color: 0x050505 });
-        const browM  = new THREE.MeshLambertMaterial({ color: 0x1a0a00 });
-        const pearl  = new THREE.MeshLambertMaterial({ color: 0xf0ece0 });
+        // Character profiles
+        const profiles = {
+            [CharacterType.TOMMY]: {
+                skin: 0xc8845a, shirt: 0x2ab8b0, pants: 0x2a2a2a, shoes: 0x0a0a0a, hair: 0x120a00, tank: false
+            },
+            [CharacterType.CJ]: {
+                skin: 0x5d3a2a, shirt: 0xffffff, pants: 0x2b3d5c, shoes: 0x111111, hair: 0x000000, tank: true
+            },
+            [CharacterType.CLAUDE]: {
+                skin: 0xf4c2a1, shirt: 0x1a1a1a, pants: 0x1a1a1a, shoes: 0x222222, hair: 0x2a1a0a, tank: false
+            }
+        };
 
-        const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x=0, y=0, z=0) => {
+        const p = profiles[this.characterType];
+        const skinMat  = new THREE.MeshLambertMaterial({ color: p.skin });
+        const hairMat  = new THREE.MeshLambertMaterial({ color: p.hair });
+        const shirtMat = new THREE.MeshLambertMaterial({ color: p.shirt });
+        const pantsMat = new THREE.MeshLambertMaterial({ color: p.pants });
+        const shoesMat = new THREE.MeshLambertMaterial({ color: p.shoes });
+        
+        const add = (name: string, geo: THREE.BufferGeometry, mat: THREE.Material, x=0, y=0, z=0) => {
             const m = new THREE.Mesh(geo, mat);
             m.position.set(x, y, z);
             g.add(m);
+            this.characterMeshes.set(name, m);
             return m;
         };
 
         // HEAD
-        add(new THREE.BoxGeometry(0.38, 0.42, 0.36), skin,  0, 1.76, 0);
-        add(new THREE.BoxGeometry(0.34, 0.12, 0.34), skin,  0, 1.56, 0);
-        add(new THREE.BoxGeometry(0.36, 0.10, 0.34), skin,  0, 1.94, 0);
+        add('head', new THREE.BoxGeometry(0.38, 0.42, 0.36), skinMat, 0, 1.76, 0);
+        add('hair', new THREE.BoxGeometry(0.38, 0.05, 0.32), hairMat, 0, 2.00, -0.01);
+        add('neck', new THREE.BoxGeometry(0.20, 0.18, 0.20), skinMat, 0, 1.48, 0);
 
-        // HAIR
-        add(new THREE.BoxGeometry(0.38, 0.05, 0.32), hair,  0,      2.00, -0.01);
-        add(new THREE.BoxGeometry(0.36, 0.18, 0.06), hair,  0,      1.92, -0.17);
-        add(new THREE.BoxGeometry(0.05, 0.30, 0.30), hair, -0.185,  1.88,  0);
-        add(new THREE.BoxGeometry(0.05, 0.30, 0.30), hair,  0.185,  1.88,  0);
-        add(new THREE.BoxGeometry(0.20, 0.04, 0.06), hair,  0,      1.98,  0.16);
-
-        // FACE
-        add(new THREE.BoxGeometry(0.14, 0.04, 0.05), browM, -0.10, 1.84, 0.18);
-        add(new THREE.BoxGeometry(0.14, 0.04, 0.05), browM,  0.10, 1.84, 0.18);
-        add(new THREE.BoxGeometry(0.08, 0.055, 0.04), eyeM, -0.10, 1.77, 0.18);
-        add(new THREE.BoxGeometry(0.08, 0.055, 0.04), eyeM,  0.10, 1.77, 0.18);
-        add(new THREE.BoxGeometry(0.06, 0.10, 0.06), skin,   0,    1.70, 0.18);
-        add(new THREE.BoxGeometry(0.12, 0.025, 0.04), browM,  0,   1.62, 0.18);
-        add(new THREE.BoxGeometry(0.04, 0.10, 0.08), skin,  -0.20, 1.74, 0);
-        add(new THREE.BoxGeometry(0.04, 0.10, 0.08), skin,   0.20, 1.74, 0);
-
-        // NECK
-        add(new THREE.BoxGeometry(0.20, 0.18, 0.20), skin, 0, 1.48, 0);
-
-        // PEARL NECKLACE
-        for (let i = 0; i < 8; i++) {
-            const a  = (i / 8) * Math.PI;
-            const nx = Math.sin(a - Math.PI / 2) * 0.12;
-            const nz = Math.cos(a - Math.PI / 2) * 0.10 + 0.05;
-            add(new THREE.BoxGeometry(0.04, 0.04, 0.04), pearl, nx, 1.42, nz);
-        }
-
-        // TORSO — teal hawaiian shirt
-        const torso = add(new THREE.BoxGeometry(0.60, 0.72, 0.30), shirt, 0, 1.16, 0);
-        torso.castShadow = true;
-        add(new THREE.BoxGeometry(0.06, 0.70, 0.30), shirtD, -0.30, 1.16, 0);
-        add(new THREE.BoxGeometry(0.06, 0.70, 0.30), shirtD,  0.30, 1.16, 0);
-        add(new THREE.BoxGeometry(0.16, 0.22, 0.32), skin,    0,    1.44, 0);
-        add(new THREE.BoxGeometry(0.12, 0.20, 0.32), shirtD, -0.14, 1.44, 0);
-        add(new THREE.BoxGeometry(0.12, 0.20, 0.32), shirtD,  0.14, 1.44, 0);
-        add(new THREE.BoxGeometry(0.03, 0.50, 0.32), shirtD,  0,    1.10, 0);
-
-        // ARMS — short sleeves
-        this.leftArm  = add(new THREE.BoxGeometry(0.17, 0.30, 0.17), shirt, -0.40, 1.38, 0) as THREE.Mesh;
-        this.rightArm = add(new THREE.BoxGeometry(0.17, 0.30, 0.17), shirt,  0.40, 1.38, 0) as THREE.Mesh;
-        add(new THREE.BoxGeometry(0.15, 0.32, 0.15), skin, -0.40, 1.08, 0);
-        add(new THREE.BoxGeometry(0.15, 0.32, 0.15), skin,  0.40, 1.08, 0);
-        add(new THREE.BoxGeometry(0.14, 0.14, 0.14), skin, -0.40, 0.88, 0);
-        add(new THREE.BoxGeometry(0.14, 0.14, 0.14), skin,  0.40, 0.88, 0);
-
-        // BELT
-        add(new THREE.BoxGeometry(0.60, 0.07, 0.31),
-            new THREE.MeshLambertMaterial({ color: 0x111111 }), 0, 0.82, 0);
-        add(new THREE.BoxGeometry(0.10, 0.07, 0.06),
-            new THREE.MeshLambertMaterial({ color: 0x888844, emissive: new THREE.Color(0x444422) }), 0, 0.82, 0.16);
+        // TORSO
+        add('torso', new THREE.BoxGeometry(0.60, 0.72, 0.30), shirtMat, 0, 1.16, 0);
+        
+        // ARMS
+        const armMat = p.tank ? skinMat : shirtMat;
+        this.leftArm = add('leftArmUpper', new THREE.BoxGeometry(0.17, 0.30, 0.17), armMat, -0.40, 1.38, 0) as THREE.Mesh;
+        this.rightArm = add('rightArmUpper', new THREE.BoxGeometry(0.17, 0.30, 0.17), armMat, 0.40, 1.38, 0) as THREE.Mesh;
+        add('leftArmLower', new THREE.BoxGeometry(0.15, 0.32, 0.15), skinMat, -0.40, 1.08, 0);
+        add('rightArmLower', new THREE.BoxGeometry(0.15, 0.32, 0.15), skinMat, 0.40, 1.08, 0);
 
         // LEGS
-        this.leftLeg  = add(new THREE.BoxGeometry(0.21, 0.72, 0.21), pants, -0.15, 0.42, 0) as THREE.Mesh;
-        this.rightLeg = add(new THREE.BoxGeometry(0.21, 0.72, 0.21), pants,  0.15, 0.42, 0) as THREE.Mesh;
+        this.leftLeg = add('leftLeg', new THREE.BoxGeometry(0.21, 0.72, 0.21), pantsMat, -0.15, 0.42, 0) as THREE.Mesh;
+        this.rightLeg = add('rightLeg', new THREE.BoxGeometry(0.21, 0.72, 0.21), pantsMat, 0.15, 0.42, 0) as THREE.Mesh;
 
         // SHOES
-        add(new THREE.BoxGeometry(0.22, 0.10, 0.32), shoes, -0.15, 0.05, 0.04);
-        add(new THREE.BoxGeometry(0.22, 0.10, 0.32), shoes,  0.15, 0.05, 0.04);
+        add('leftShoe', new THREE.BoxGeometry(0.22, 0.10, 0.32), shoesMat, -0.15, 0.05, 0.04);
+        add('rightShoe', new THREE.BoxGeometry(0.22, 0.10, 0.32), shoesMat, 0.15, 0.05, 0.04);
+
+        return g;
+    }
 
         return g;
     }
@@ -263,14 +246,36 @@ export class Player {
             setTimeout(() => this.jumpForce = 7, 20000);
             this.showCheat('SUPER JUMP 20s');
         },
+        'CJ': () => this.switchCharacter(CharacterType.CJ),
+        'TOMMY': () => this.switchCharacter(CharacterType.TOMMY),
+        'CLAUDE': () => this.switchCharacter(CharacterType.CLAUDE),
+    };
     };
 
     private speedBoost() {
         if (this.onSpeedBoost) this.onSpeedBoost();
     }
 
+    public switchCharacter(type: CharacterType) {
+        this.characterType = type;
+        this.scene.remove(this.mesh);
+        this.mesh = this.buildModel();
+        this.scene.add(this.mesh);
+        this.updateGunVisual(); // Re-attach gun to new mesh
+        this.showCheat(`CHARACTER: ${type}`);
+    }
+
     private handleCheat(key: string) {
         if (key.length !== 1) return;
+        
+        // Character toggle shortcut
+        if (key.toLowerCase() === 'c') {
+            const types = [CharacterType.TOMMY, CharacterType.CJ, CharacterType.CLAUDE];
+            const nextIdx = (types.indexOf(this.characterType) + 1) % types.length;
+            this.switchCharacter(types[nextIdx]);
+            return;
+        }
+
         this.cheatBuffer += key.toUpperCase();
         if (this.cheatBuffer.length > 20) this.cheatBuffer = this.cheatBuffer.slice(-20);
         for (const code of Object.keys(this.CHEATS)) {
@@ -498,7 +503,10 @@ export class Player {
             _camTarget.y + this.ORBIT_DIST * Math.sin(this.pitch),
             _camTarget.z + this.ORBIT_DIST * Math.cos(this.yaw) * Math.cos(this.pitch)
         );
-        this.camera.position.lerp(_camPos, sprinting ? 0.18 : 0.12);
+        // FIX: normalize lerp factor by frame time so camera speed is the same at any Hz
+        const baseLerp = sprinting ? 0.22 : 0.15;
+        const lerpT    = 1 - Math.pow(1 - baseLerp, 60 * dt);
+        this.camera.position.lerp(_camPos, lerpT);
         this.camera.lookAt(_camTarget);
     }
 

@@ -50,10 +50,8 @@ export class Bike {
         const chassisShape = new CANNON.Box(new CANNON.Vec3(0.3, 0.4, 0.9));
         this.chassisBody = new CANNON.Body({ mass: 200, shape: chassisShape });
         this.chassisBody.position.set(position.x, position.y + 1.0, position.z);
-        this.chassisBody.linearDamping  = 0.05;
-        this.chassisBody.angularDamping = 0.3;
-        this.chassisBody.allowSleep = false;
-        this.chassisBody.sleepSpeedLimit = 0.1;
+        this.chassisBody.linearDamping  = 0.15;
+        this.chassisBody.angularDamping = 0.6;
         world.addBody(this.chassisBody);
 
         this.chassisMesh = this.buildBikeModel();
@@ -70,13 +68,13 @@ export class Bike {
         const wheelOpts = {
             radius:                         0.32,
             directionLocal:                 new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness:            50,
-            suspensionRestLength:           0.25,
-            frictionSlip:                   4.0,
-            dampingRelaxation:              2.5,
-            dampingCompression:             4.5,
-            maxSuspensionForce:             100000,
-            rollInfluence:                  0.05, // Higher for bike (more lean)
+            suspensionStiffness: 45,
+            suspensionRestLength: 0.3,
+            frictionSlip: 5.5,
+            dampingRelaxation: 3.5,
+            dampingCompression: 5.5,
+            maxSuspensionForce: 100000,
+            rollInfluence: 0.02, // Lower for stability
             axleLocal:                      new CANNON.Vec3(1, 0, 0),
             chassisConnectionPointLocal:    new CANNON.Vec3(1, 1, 0),
             maxSuspensionTravel:            0.25,
@@ -236,10 +234,14 @@ export class Bike {
             .length();
 
         // Faster steering response for bike
-        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 20 * dt);
+        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 15 * dt);
 
         // Apply forces - rear wheel drive
         this.vehicle.applyEngineForce(force, 1); // Rear wheel only
+        // Apply small Aerodynamic Downforce
+        const downforce = spd * 25;
+        this.chassisBody.applyForce(new CANNON.Vec3(0, -downforce, 0), new CANNON.Vec3(0, 0, 0));
+
         this.vehicle.setSteeringValue(this.currentSteeringValue, 0); // Front wheel only
 
         if (handbrake) {

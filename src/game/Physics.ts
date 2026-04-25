@@ -40,8 +40,8 @@ export class Physics {
     }
 
     public update(dt: number) {
-        // Fixed timestep 1/60, max 3 substeps — stable without being expensive
-        this.world.step(1 / 60, dt, 3);
+        // Higher frequency (1/120) and more substeps (10) for "car game" smoothness
+        this.world.step(1 / 120, dt, 10);
     }
 
     public getWorld() { return this.world; }
