@@ -20,6 +20,7 @@ import { CheatSystem }   from './CheatSystem';
 import { Bomb }          from './Bomb';
 import { MusicSystem }   from './MusicSystem';
 import { WeaponSystem }  from './WeaponSystem';
+import { AssetManager }  from './AssetManager';
 
 const _dp = new THREE.Vector3();
 
@@ -41,6 +42,7 @@ export class Core {
     private bombs: Bomb[] = [];
     private musicSystem: MusicSystem;
     private weaponSystem: WeaponSystem;
+    public assetManager: AssetManager;
     
     // Reusable raycaster for bullets (performance optimization)
     private bulletRaycaster = new THREE.Raycaster();
@@ -72,6 +74,7 @@ export class Core {
             this.sound   = new Sound();
             this.scene   = new GameScene();
             this.physics = new Physics();
+            this.assetManager = new AssetManager();
             this.city    = new City(
                 this.scene.getScene(),
                 this.physics.getWorld(),
@@ -82,7 +85,8 @@ export class Core {
                 this.scene.getScene(),
                 this.physics.getWorld(),
                 this.scene.getCamera(),
-                this.physics.playerMaterial
+                this.physics.playerMaterial,
+                this.assetManager
             );
 
             this.vehicle = new Vehicle(
@@ -233,6 +237,10 @@ export class Core {
     private async init() {
         const bar    = document.getElementById('loader-bar');
         const screen = document.getElementById('loading-screen');
+        
+        // Wait for all GLTF assets to load (if any exist in public/models/)
+        await this.assetManager.loadAll();
+        
         for (let i = 0; i <= 100; i += 10) {
             if (bar) bar.style.width = `${i}%`;
             await new Promise(r => setTimeout(r, 20));

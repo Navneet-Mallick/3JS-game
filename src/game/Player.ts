@@ -3,6 +3,7 @@ import * as CANNON from 'cannon-es';
 import { Input } from './Input';
 import { WeaponSystem } from './WeaponSystem';
 import { TouchControls } from './TouchControls';
+import { AssetManager } from './AssetManager';
 
 // Pre-allocated — zero per-frame heap allocations
 const _fwdVec    = new THREE.Vector3();
@@ -73,12 +74,16 @@ export class Player {
     // Callback wired by Core
     public onSpeedBoost: (() => void) | null = null;
 
+    private assetManager?: AssetManager;
+
     constructor(
         scene:  THREE.Scene,
         world:  CANNON.World,
         camera: THREE.PerspectiveCamera,
-        playerMaterial?: CANNON.Material
+        playerMaterial?: CANNON.Material,
+        assetManager?: AssetManager
     ) {
+        this.assetManager = assetManager;
         this.scene  = scene;
         this.camera = camera;
         this.mesh   = this.buildModel();
@@ -106,6 +111,11 @@ export class Player {
     // ── Tommy Vercetti model ──────────────────────────────────────────────────
     // ── Build Character Model ────────────────────────────────────────────────
     private buildModel(): THREE.Group {
+        if (this.assetManager) {
+            const gltfModel = this.assetManager.getModel('player');
+            if (gltfModel) return gltfModel;
+        }
+
         const g = new THREE.Group();
         this.characterMeshes.clear();
 
