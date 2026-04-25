@@ -42,6 +42,8 @@ export class TrafficCar {
     private waypoint: THREE.Vector3;
     private stuckTimer = 0;
     private lastPos = new THREE.Vector3();
+    public health = 100;
+    public isDead = false;
 
     constructor(scene: THREE.Scene, world: CANNON.World, position: CANNON.Vec3) {
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];
@@ -137,19 +139,28 @@ export class TrafficCar {
     }
 
     public update(dt: number) {
+        if (this.isDead) {
+            this.vehicle.applyEngineForce(0, 0);
+            this.vehicle.applyEngineForce(0, 1);
+            this.vehicle.applyEngineForce(0, 2);
+            this.vehicle.applyEngineForce(0, 3);
+            for (let i = 0; i < 4; i++) this.vehicle.setBrake(100, i);
+            return;
+        }
+
         const pos = this.chassisBody.position;
         const curPos = new THREE.Vector3(pos.x, pos.y, pos.z);
 
-        // Stuck detection — if barely moved in 2s, pick new waypoint
+        // Stuck detection — if barely moved in 1s, pick new waypoint
         this.stuckTimer += dt;
-        if (this.stuckTimer > 2.0) {
-            if (curPos.distanceTo(this.lastPos) < 1.5) {
+        if (this.stuckTimer > 1.0) {
+            if (curPos.distanceTo(this.lastPos) < 1.0) {
                 this.waypoint = randomWaypoint();
                 // Give a small nudge
                 this.chassisBody.velocity.set(
-                    (Math.random() - 0.5) * 4,
+                    (Math.random() - 0.5) * 6,
                     0,
-                    (Math.random() - 0.5) * 4
+                    (Math.random() - 0.5) * 6
                 );
             }
             this.lastPos.copy(curPos);
@@ -196,4 +207,21 @@ export class TrafficCar {
     }
 
     public getPosition() { return this.chassisMesh.position; }
+
+    public takeDamage(damage: number): boolean {
+        if (this.isDead) return false;
+        this.health -= damage;
+        if (this.health <= 0) {
+            this.isDead = true;
+            this.health = 0;
+            // Visual feedback for destroyed car
+            this.chassisMesh.traverse((child) => {
+                if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshLambertMaterial) {
+                    child.material.color.setHex(0x333333); // Blacken the car
+                }
+            });
+            return true;
+        }
+        return false;
+    }
 }

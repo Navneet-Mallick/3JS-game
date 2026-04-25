@@ -185,8 +185,8 @@ export class Bike {
         else                          { this.speedBoostMultiplier = 1.0; }
 
         // Bike has simpler power delivery - no gears
-        const ENGINE_FORCE = 1200 * this.speedBoostMultiplier; // Lighter, faster acceleration
-        const BRAKE_FORCE  = 120;
+        const ENGINE_FORCE = 1800 * this.speedBoostMultiplier; // Lighter, faster acceleration
+        const BRAKE_FORCE  = 180;
         const MAX_STEER    = Math.max(0.4, 0.8 - spd * 0.005); // More agile steering
 
         let force = 0, steer = 0, brake = 0;
@@ -259,17 +259,17 @@ export class Bike {
         // Gently lifts the chassis when it sinks below suspension range,
         // restoring wheel-ground contact without the old teleport jitter.
         if (this.chassisBody.position.y < 0.4) {
-            this.chassisBody.position.y += (0.4 - this.chassisBody.position.y) * 0.3;
-            if (this.chassisBody.velocity.y < 0) this.chassisBody.velocity.y = 0;
+            this.chassisBody.position.y += (0.5 - this.chassisBody.position.y) * 0.4;
+            if (this.chassisBody.velocity.y < 0) this.chassisBody.velocity.y = 1.0;
         }
 
         // ── Stuck detection ──────────────────────────────────────────────────
         // Upward impulse after 1.5 s of throttle with no speed gain.
-        if (this.isOccupied && throttle && spd < 3) {
+        if (this.isOccupied && throttle && spd < 4) {
             this.stuckTimer += dt;
-            if (this.stuckTimer > 1.5) {
+            if (this.stuckTimer > 1.0) {
                 this.chassisBody.applyImpulse(
-                    new CANNON.Vec3(0, 800, 0),
+                    new CANNON.Vec3(0, 1500, 0),
                     new CANNON.Vec3(0, 0, 0)
                 );
                 this.stuckTimer = 0;

@@ -194,8 +194,8 @@ export class Vehicle {
         }
 
         const gearRatio    = this.GEAR_RATIOS[this.gear] ?? 1;
-        const ENGINE_FORCE = 2000 * gearRatio * this.speedBoostMultiplier; // Increased for better response
-        const BRAKE_FORCE  = 100;
+        const ENGINE_FORCE = 3000 * gearRatio * this.speedBoostMultiplier; // Increased for better response
+        const BRAKE_FORCE  = 150;
         const MAX_STEER    = Math.max(0.35, 0.7 - spd * 0.004);
 
         let force = 0, steer = 0, brake = 0;
@@ -271,19 +271,19 @@ export class Vehicle {
         // it sinks below the minimum ride height (suspension fully compressed).
         // This restores wheel-ground contact without the hill-jitter of a hard snap.
         if (this.chassisBody.position.y < 0.55) {
-            this.chassisBody.position.y += (0.55 - this.chassisBody.position.y) * 0.3;
-            if (this.chassisBody.velocity.y < 0) this.chassisBody.velocity.y = 0;
+            this.chassisBody.position.y += (0.6 - this.chassisBody.position.y) * 0.4;
+            if (this.chassisBody.velocity.y < 0) this.chassisBody.velocity.y = 1.0;
         }
 
         // ── Stuck detection ──────────────────────────────────────────────────
         // If the player has been holding throttle but the car isn't moving,
         // it is physics-stuck (wedged against geometry or pinned by gravity).
         // After 1.5 s we fire a small upward impulse to break it free.
-        if (this.isOccupied && throttle && spd < 3) {
+        if (this.isOccupied && throttle && spd < 4) {
             this.stuckTimer += dt;
-            if (this.stuckTimer > 1.5) {
+            if (this.stuckTimer > 1.0) {
                 this.chassisBody.applyImpulse(
-                    new CANNON.Vec3(0, 1800, 0),
+                    new CANNON.Vec3(0, 3500, 0),
                     new CANNON.Vec3(0, 0, 0)
                 );
                 this.stuckTimer = 0;

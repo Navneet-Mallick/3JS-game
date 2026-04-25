@@ -6,14 +6,18 @@ export class Bomb {
     private body: CANNON.Body;
     private fuseTimer: number = 3.0; // 3 second fuse
     private isExploded: boolean = false;
-    private explosionRadius: number = 30;
-    private explosionForce: number = 150;
+    private explosionRadius: number = 20;
+    private explosionForce: number = 250;
+    private sound: any;
+    public onExplode: ((pos: THREE.Vector3) => void) | null = null;
 
     constructor(
         scene: THREE.Scene,
         world: CANNON.World,
-        position: THREE.Vector3
+        position: THREE.Vector3,
+        sound: any
     ) {
+        this.sound = sound;
         // Create bomb mesh
         const geometry = new THREE.SphereGeometry(0.3, 8, 8);
         const material = new THREE.MeshStandardMaterial({
@@ -60,8 +64,10 @@ export class Bomb {
 
     private explode(scene: THREE.Scene, world: CANNON.World) {
         this.isExploded = true;
+        if (this.sound) this.sound.playExplosion();
 
-        const explosionPos = this.mesh.position;
+        const explosionPos = this.mesh.position.clone();
+        if (this.onExplode) this.onExplode(explosionPos);
 
         // Create explosion effect
         const explosionGeometry = new THREE.IcosahedronGeometry(this.explosionRadius * 0.3, 4);

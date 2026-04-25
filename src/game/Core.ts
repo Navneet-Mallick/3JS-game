@@ -260,40 +260,42 @@ export class Core {
             
             // Check if ray hits pedestrian (simple sphere collision)
             const hitDist = raycaster.ray.distanceToPoint(pedPos);
-            if (hitDist < 0.5) { // Hit radius
+            if (hitDist < 0.6) { // Slightly larger hit radius
                 const killed = ped.takeDamage(damage);
                 hitSomething = true;
-                hitPosition = pedPos.clone();
+                hitPosition = pedPos.clone().add(new THREE.Vector3(0, 1, 0)); // Hit center of body
                 
                 // Blood effect
-                this.createBloodEffect(pedPos);
+                this.createBloodEffect(hitPosition);
                 
                 if (killed) {
-                    // Add wanted level for killing civilian
                     this.wantedLevel.addWantedLevel(2);
-                    this.sound.playExplosion();
                 } else {
-                    // Add wanted level for shooting
                     this.wantedLevel.addWantedLevel(1);
                 }
-                break; // Bullet stops at first hit
+                break;
             }
         }
         
-        // Check hits on police
-        for (let i = 0; i < this.police.length; i++) {
-            const cop = this.police[i];
-            const copPos = cop.getPosition();
-            const distSq = origin.distanceToSquared(copPos);
+        // Check hits on traffic and police
+        const allVehicles = [...this.traffic, ...this.police];
+        for (let i = 0; i < allVehicles.length; i++) {
+            const v = allVehicles[i];
+            if (v.isDead) continue;
+            
+            const vPos = v.getPosition();
+            const distSq = origin.distanceToSquared(vPos);
             if (distSq > range * range) continue;
             
-            const hitDist = raycaster.ray.distanceToPoint(copPos);
-            if (hitDist < 1.5) { // Larger hit radius for vehicles
-                // Shooting at police = instant 3 stars
-                this.wantedLevel.addWantedLevel(3);
+            const hitDist = raycaster.ray.distanceToPoint(vPos);
+            if (hitDist < 1.8) { // Hit radius for vehicles
+                v.takeDamage(damage);
                 hitSomething = true;
-                hitPosition = copPos.clone();
-                this.createBloodEffect(copPos);
+                hitPosition = vPos.clone().add(new THREE.Vector3(0, 0.5, 0));
+                
+                if (v instanceof Police) {
+                    this.wantedLevel.addWantedLevel(3);
+                }
                 break;
             }
         }
@@ -576,12 +578,35 @@ export class Core {
         if (Input.isKeyPressed('b') && !this.playerInVehicle) {
             const playerPos = this.player.getPosition();
             const bombPos = new THREE.Vector3(playerPos.x, playerPos.y + 1, playerPos.z);
-            this.bombs.push(new Bomb(
+            const bomb = new Bomb(
                 this.scene.getScene(),
                 this.physics.getWorld(),
-                bombPos
-            ));
-            this.sound.playExplosion();
+                bombPos,
+                this.sound
+            );
+            
+            // Apply damage logic when bomb explodes
+            bomb.onExplode = (pos) => {
+                // Damage pedestrians
+                this.pedestrians.forEach(p => {
+                    const dist = p.getPosition().distanceTo(pos);
+                    if (dist < 15) p.takeDamage(100);
+                });
+                
+                // Damage vehicles
+                [...this.traffic, ...this.police].forEach(v => {
+                    const dist = v.getPosition().distanceTo(pos);
+                    if (dist < 18) v.takeDamage(100);
+                });
+                
+                // Damage player if too close
+                const playerDist = this.player.getPosition().distanceTo(pos);
+                if (playerDist < 12) {
+                    this.player.health -= (12 - playerDist) * 8;
+                }
+            };
+            
+            this.bombs.push(bomb);
         }
 
         if (this.paused) {
@@ -689,7 +714,7 @@ export class Core {
             }
         }
 
-        // Pedestrian LOD
+        // Pedestrian update (only one loop needed)
         for (let i = 0; i < this.pedestrians.length; i++) {
             const p = this.pedestrians[i];
             _dp.set(
@@ -697,7 +722,7 @@ export class Core {
                 0,
                 p.getPosition().z - playerPos.z
             );
-            const near = _dp.lengthSq() < 3600; // 60²
+            const near = _dp.lengthSq() < 10000; // 100²
             p.mesh.visible = near;
             if (near) p.update(dt, playerPos);
         }
