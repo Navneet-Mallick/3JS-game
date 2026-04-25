@@ -29,11 +29,15 @@ export class Player {
 
     public mesh:   THREE.Group;
     public visible = true;
-    public gunMesh: THREE.Group | null = null; // Gun visual
+    public gunMesh: THREE.Group | null = null;
+    
+    public health: number = 100;
+    public armor:  number = 0;
+    public bombs:  number = 0;
+    public jumpForce = 7;
 
     private moveSpeed   = 6;
     private sprintSpeed = 11;
-    private jumpForce   = 7;
     private onGround    = false;
     private groundTimer = 0;
 
@@ -57,9 +61,7 @@ export class Player {
     private playerInVehicle = false;
     private cheatBuffer  = '';
     private cheatTimeout = 0;
-    public  health      = 100;
-    public  armor       = 0;
-    public  wantedLevel = 0;
+
 
     // Weapon system
     private weaponSystem: WeaponSystem | null = null;
@@ -233,7 +235,6 @@ export class Player {
         'ASPIRINE':           () => { this.health = 100;        this.showCheat('HEALTH RESTORED'); },
         'PRECIOUSPROTECTION': () => { this.armor  = 100;        this.showCheat('ARMOR ADDED'); },
         'BIGBANG':            () => { this.speedBoost();        this.showCheat('SPEED BOOST!'); },
-        'LEAVEMEALONE':       () => { this.wantedLevel = 0;     this.showCheat('WANTED CLEARED'); },
         'CANTSEEME':          () => {
             this.moveSpeed = 14;
             setTimeout(() => this.moveSpeed = 6, 30000);

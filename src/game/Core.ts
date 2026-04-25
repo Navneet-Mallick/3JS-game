@@ -208,6 +208,16 @@ export class Core {
                     }
                 }
                 
+                // Camera view toggle (V)
+                if (e.key.toLowerCase() === 'v') {
+                    if (this.playerInVehicle) {
+                        const rv = this.currentVehicle === 'bike' ? this.bike : (this.currentVehicle === 'traffic' ? this.occupiedTrafficCar! : this.vehicle);
+                        (rv as any).toggleCameraView?.();
+                    } else {
+                        (this.player as any).toggleCameraView?.();
+                    }
+                }
+                
                 // Pass all keys to cheat system
                 this.cheatSystem.handleKeyPress(e.key);
             });
