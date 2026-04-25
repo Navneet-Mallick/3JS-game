@@ -526,7 +526,6 @@ export class Core {
         this.sound.startEngine();
         if (this.speedoBox) this.speedoBox.classList.add('active');
     }
-
     // ── Pickups & destructibles ───────────────────────────────────────────────
     private handlePickups(now: number) {
         const pos = this.playerInVehicle
@@ -590,6 +589,13 @@ export class Core {
     private animate(time: number) {
         requestAnimationFrame((t) => this.animate(t));
 
+        // Check for player death
+        if (this.player.health <= 0) {
+            const screen = document.getElementById('wasted-screen');
+            if (screen) screen.classList.add('visible');
+            return;
+        }
+
         // FIX: compute dt at the very top so every code path below can use it safely
         const dt  = Math.min(0.05, (time - this.lastTime) / 1000);
         const now = time;
@@ -615,15 +621,8 @@ export class Core {
             this.player.setPosition(rv.getPosition().x + 3, rv.getPosition().y + 2, rv.getPosition().z);
         }
 
-        // Handle wanted level cheat (press G to gain wanted level)
-        if (Input.isKeyPressed('g') && this.playerInVehicle) {
-            this.wantedLevel.addWantedLevel(1);
-        }
-
-        // Handle clear wanted level (press C)
-        if (Input.isKeyPressed('c')) {
-            this.wantedLevel.clearWantedLevel();
-        }
+        // Debounced wanted level decay (handled in WantedLevel.ts)
+        this.wantedLevel.update(dt);
 
         // Handle bomb throwing (press B)
         if (Input.isKeyPressed('b') && !this.playerInVehicle) {
@@ -649,6 +648,12 @@ export class Core {
                     const dist = v.getPosition().distanceTo(pos);
                     if (dist < 18) v.takeDamage(100);
                 });
+                
+                // Damage main vehicles
+                const v = this.vehicle as any;
+                if (v.takeDamage && this.vehicle.getPosition().distanceTo(pos) < 18) v.takeDamage(100);
+                const b = this.bike as any;
+                if (b.takeDamage && this.bike.getPosition().distanceTo(pos) < 10) b.takeDamage(100);
                 
                 // Damage player if too close
                 const playerDist = this.player.getPosition().distanceTo(pos);

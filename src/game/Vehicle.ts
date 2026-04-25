@@ -359,4 +359,18 @@ export class Vehicle {
     }
 
     public boostSpeed() { this.speedBoostTimer = 5.0; }
+
+    public takeDamage(damage: number): boolean {
+        // Main car is indestructible for now but receives visual feedback
+        this.chassisMesh.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshLambertMaterial) {
+                const mat = child.material as THREE.MeshLambertMaterial;
+                mat.emissive.setHex(0x550000);
+                setTimeout(() => {
+                    mat.emissive.setHex(0x000000);
+                }, 100);
+            }
+        });
+        return false;
+    }
 }

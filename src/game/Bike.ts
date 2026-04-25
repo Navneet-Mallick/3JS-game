@@ -346,5 +346,19 @@ export class Bike {
         return Math.round(Math.sqrt(v.x * v.x + v.z * v.z) * 3.6);
     }
 
-    public boostSpeed() { this.speedBoostTimer = 5.0; }
+    public boostSpeed() { this.speedBoostMultiplier = 1.5; this.speedBoostTimer = 5.0; }
+
+    public takeDamage(damage: number): boolean {
+        // Visual flash for bike damage
+        this.chassisMesh.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshLambertMaterial) {
+                const mat = child.material as THREE.MeshLambertMaterial;
+                mat.emissive.setHex(0x550000);
+                setTimeout(() => {
+                    mat.emissive.setHex(0x000000);
+                }, 100);
+            }
+        });
+        return false;
+    }
 }
