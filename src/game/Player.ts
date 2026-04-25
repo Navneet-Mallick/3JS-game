@@ -15,11 +15,12 @@ const _headPos   = new THREE.Vector3();
 const _euler     = new THREE.Euler();
 const _dtVec     = new THREE.Vector3();
 
-export enum CharacterType {
-    TOMMY = 'TOMMY',
-    CJ = 'CJ',
-    CLAUDE = 'CLAUDE'
-}
+export type CharacterType = 'TOMMY' | 'CJ' | 'CLAUDE';
+export const CharacterType = {
+    TOMMY: 'TOMMY' as CharacterType,
+    CJ: 'CJ' as CharacterType,
+    CLAUDE: 'CLAUDE' as CharacterType
+};
 
 export class Player {
     private scene:  THREE.Scene;
@@ -159,9 +160,6 @@ export class Player {
 
         return g;
     }
-
-        return g;
-    }
     
     // ── Build Gun Model ───────────────────────────────────────────────────────
     private buildGunModel(): THREE.Group {
@@ -249,7 +247,6 @@ export class Player {
         'CJ': () => this.switchCharacter(CharacterType.CJ),
         'TOMMY': () => this.switchCharacter(CharacterType.TOMMY),
         'CLAUDE': () => this.switchCharacter(CharacterType.CLAUDE),
-    };
     };
 
     private speedBoost() {
@@ -465,11 +462,11 @@ export class Player {
             this.rightArm.rotation.x = THREE.MathUtils.lerp(this.rightArm.rotation.x, 0, t);
         }
 
-        this.updateCamera(moving, sprinting);
+        this.updateCamera(moving, sprinting, dt);
     }
 
     // ── Camera ────────────────────────────────────────────────────────────────
-    private updateCamera(moving: boolean, sprinting: boolean) {
+    private updateCamera(moving: boolean, sprinting: boolean, dt: number) {
         const bob = moving
             ? Math.sin(this.bobTime * 0.5) * (sprinting ? 0.04 : 0.02)
             : 0;

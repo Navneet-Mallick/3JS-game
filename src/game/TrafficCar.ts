@@ -254,7 +254,7 @@ export class TrafficCar {
 
     private updateCamera(dt: number) {
         if (!this.camera) return;
-        const { Input } = require('./Input');
+        const input = Input; 
         if (Input.movementX !== 0 || Input.movementY !== 0) {
             this.camYaw -= Input.movementX * 0.003;
             this.camPitch -= Input.movementY * 0.003;
@@ -287,6 +287,13 @@ export class TrafficCar {
     public setVisible(v: boolean) {
         this.chassisMesh.visible = v;
         this.wheelMeshes.forEach(w => w.visible = v);
+    }
+
+    public resetPosition() {
+        this.chassisBody.position.y += 2;
+        this.chassisBody.velocity.set(0, 0, 0);
+        this.chassisBody.angularVelocity.set(0, 0, 0);
+        this.chassisBody.quaternion.set(0, 0, 0, 1);
     }
 
     public takeDamage(damage: number): boolean {
