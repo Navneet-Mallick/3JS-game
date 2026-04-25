@@ -7,7 +7,7 @@ export class Bomb {
     private fuseTimer: number = 3.0; // 3 second fuse
     private isExploded: boolean = false;
     private explosionRadius: number = 20;
-    private explosionForce: number = 250;
+    private explosionForce: number = 2000;
     private sound: any;
     public onExplode: ((pos: THREE.Vector3) => void) | null = null;
 

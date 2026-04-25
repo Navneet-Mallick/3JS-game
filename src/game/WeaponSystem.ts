@@ -38,7 +38,7 @@ export class WeaponSystem {
         // Pistol
         this.weapons.set(WeaponType.PISTOL, {
             name: 'Pistol',
-            damage: 25,
+            damage: 35,
             fireRate: 0.15,
             range: 100,
             ammo: 30,
@@ -49,7 +49,7 @@ export class WeaponSystem {
         // Shotgun
         this.weapons.set(WeaponType.SHOTGUN, {
             name: 'Shotgun',
-            damage: 60,
+            damage: 100,
             fireRate: 0.8,
             range: 30,
             ammo: 8,
@@ -60,7 +60,7 @@ export class WeaponSystem {
         // Rifle
         this.weapons.set(WeaponType.RIFLE, {
             name: 'Rifle',
-            damage: 40,
+            damage: 50,
             fireRate: 0.2,
             range: 200,
             ammo: 30,

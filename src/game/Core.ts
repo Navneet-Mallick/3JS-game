@@ -285,6 +285,7 @@ export class Core {
                 
                 if (killed) {
                     this.wantedLevel.addWantedLevel(2);
+                    this.spawnDynamicPickup(pedPos);
                 } else {
                     this.wantedLevel.addWantedLevel(1);
                 }
@@ -359,6 +360,30 @@ export class Core {
             else this.scene.getScene().remove(tracer);
         };
         animate();
+    }
+
+    private spawnDynamicPickup(position: THREE.Vector3) {
+        const type = Math.random() > 0.5 ? 'health' : 'ammo';
+        const color = type === 'health' ? 0x00ff00 : 0x0088ff;
+        
+        const geo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+        const mat = new THREE.MeshBasicMaterial({ color });
+        const mesh = new THREE.Mesh(geo, mat);
+        
+        // Spawn slightly above ground
+        mesh.position.copy(position);
+        mesh.position.y = 1.0;
+        
+        mesh.userData = {
+            type: 'powerup',
+            powerType: type,
+            collected: false,
+            rotationSpeed: 0.05
+        };
+        
+        this.scene.getScene().add(mesh);
+        // Add to the city's powerup array so it's checked in handlePickups
+        this.city.getPowerUps().push(mesh);
     }
 
     private createBloodEffect(position: THREE.Vector3) {
@@ -568,7 +593,14 @@ export class Core {
                 p.userData.collected = true;
                 p.visible = false;
                 this.sound.playPickup();
-                if (this.playerInVehicle) this.vehicle.boostSpeed();
+                
+                if (p.userData.powerType === 'speed' && this.playerInVehicle) {
+                    this.vehicle.boostSpeed();
+                } else if (p.userData.powerType === 'health') {
+                    this.player.health = Math.min(100, this.player.health + 50);
+                } else if (p.userData.powerType === 'ammo') {
+                    this.weaponSystem.addAmmo(30);
+                }
             } else {
                 p.rotation.y += p.userData.rotationSpeed;
                 p.position.y  = 1 + Math.sin(now * 0.003 + i) * 0.3;
@@ -704,8 +736,16 @@ export class Core {
             bomb.onExplode = (pos) => {
                 // Damage pedestrians
                 this.pedestrians.forEach(p => {
+                    if (p.isDead) return;
                     const dist = p.getPosition().distanceTo(pos);
-                    if (dist < 15) p.takeDamage(100);
+                    if (dist < 15) {
+                        const killed = p.takeDamage(100);
+                        if (killed) {
+                            this.spawnDynamicPickup(p.getPosition());
+                            this.wantedLevel.addWantedLevel(2);
+                        }
+                    }
+
                 });
                 
                 // Damage vehicles
