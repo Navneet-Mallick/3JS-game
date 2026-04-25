@@ -84,13 +84,13 @@ export class TrafficCar {
         const wheelOpts = {
             radius: 0.35,
             directionLocal: new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness: 40,
-            suspensionRestLength: 0.28,
-            frictionSlip: 2.0,
-            dampingRelaxation: 2.3,
-            dampingCompression: 4.5,
-            maxSuspensionForce: 80000,
-            rollInfluence: 0.01,
+            suspensionStiffness: 65,
+            suspensionRestLength: 0.3,
+            frictionSlip: 2.5,
+            dampingRelaxation: 4.5,
+            dampingCompression: 6.5,
+            maxSuspensionForce: 100000,
+            rollInfluence: 0.001,
             axleLocal: new CANNON.Vec3(1, 0, 0),
             chassisConnectionPointLocal: new CANNON.Vec3(1, 1, 0),
             maxSuspensionTravel: 0.2,
@@ -171,25 +171,27 @@ export class TrafficCar {
 
         const spd = this.getSpeedKmh();
         let force = 0, steer = 0, brake = 0;
-        let throttle = false;
+        let handbrake = false;
 
         if (this.isOccupied && this.camera) {
             const ENGINE_FORCE = 3000;
             const MAX_STEER = Math.max(0.35, 0.7 - spd * 0.004);
 
-            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup')) { force = ENGINE_FORCE; throttle = true; }
+            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup')) { force = ENGINE_FORCE; }
             if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown')) { force = -ENGINE_FORCE * 0.6; }
             if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft')) steer = MAX_STEER;
             if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
+            handbrake = Input.isKeyDown(' ');
+            brake = handbrake ? 3000 : 0;
             
             if (TouchControls.active) {
-                if (TouchControls.gasPressed) { force = ENGINE_FORCE; throttle = true; }
+                if (TouchControls.gasPressed) { force = ENGINE_FORCE; }
                 if (TouchControls.brakePressed) { force = -ENGINE_FORCE * 0.6; }
                 if (Math.abs(TouchControls.moveX) > 0.1) steer = -TouchControls.moveX * MAX_STEER;
             }
 
             if (GamepadInput.connected) {
-                if (GamepadInput.rt > 0.05) { force = ENGINE_FORCE * GamepadInput.rt; throttle = true; }
+                if (GamepadInput.rt > 0.05) { force = ENGINE_FORCE * GamepadInput.rt; }
                 if (GamepadInput.lt > 0.05) force = -ENGINE_FORCE * GamepadInput.lt * 0.6;
                 if (Math.abs(GamepadInput.leftX) > 0.05) steer = -GamepadInput.leftX * MAX_STEER;
             }
@@ -197,11 +199,12 @@ export class TrafficCar {
             this.updateCamera(dt);
             this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 15 * dt);
             
-            this.vehicle.applyEngineForce(force, 2);
-            this.vehicle.applyEngineForce(force, 3);
+            for (let i = 0; i < 4; i++) {
+                this.vehicle.applyEngineForce(force, i);
+                this.vehicle.setBrake(brake, i);
+            }
             this.vehicle.setSteeringValue(this.currentSteeringValue, 0);
             this.vehicle.setSteeringValue(this.currentSteeringValue, 1);
-            for (let i = 0; i < 4; i++) this.vehicle.setBrake(Input.isKeyDown(' ') ? 500 : 0, i);
 
             // Lateral speed for drift
             const carFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as any);

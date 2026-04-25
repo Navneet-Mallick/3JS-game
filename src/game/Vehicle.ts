@@ -74,13 +74,13 @@ export class Vehicle {
         const wheelOpts = {
             radius:                         0.38,
             directionLocal:                 new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness: 35, // Softer for "luxury" feel
-            suspensionRestLength: 0.35,
-            frictionSlip: 5.0, 
-            dampingRelaxation: 3.5, // Much more damping for smoothness
+            suspensionStiffness: 55,
+            suspensionRestLength: 0.28,
+            frictionSlip: 2.5,
+            dampingRelaxation: 3.5,
             dampingCompression: 5.5,
-            maxSuspensionForce: 150000,
-            rollInfluence: 0.002, // Almost zero to prevent jittery flipping
+            maxSuspensionForce: 100000,
+            rollInfluence: 0.001,
             axleLocal: new CANNON.Vec3(1, 0, 0),
             chassisConnectionPointLocal: new CANNON.Vec3(0, 0, 0),
             maxSuspensionTravel:            0.3,  // Tighter travel for better control
@@ -196,7 +196,7 @@ export class Vehicle {
         const MAX_STEER    = Math.max(0.3, 0.6 - spd * 0.0035);
 
         let force = 0, steer = 0, brake = 0;
-        let handbrake = false, throttle = false;
+        let throttle = false;
 
         if (this.isOccupied) {
             // Keyboard controls
@@ -208,7 +208,7 @@ export class Vehicle {
             if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft')) steer = MAX_STEER;
             if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
             
-            if (Input.isKeyDown(' ')) brake = 2500;
+            if (Input.isKeyDown(' ')) brake = 4000;
             
             // Touch controls
             if (TouchControls.active) {
@@ -242,6 +242,7 @@ export class Vehicle {
         _carFwd.set(0, 0, 1).applyQuaternion(
             this.chassisBody.quaternion as unknown as THREE.Quaternion
         );
+
         _vel.set(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
         this.lateralSpeed = _vel.clone()
             .sub(_carFwd.clone().multiplyScalar(_vel.dot(_carFwd)))
@@ -251,8 +252,11 @@ export class Vehicle {
         this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 8 * dt);
 
         // Apply forces
-        this.vehicle.applyEngineForce(force, 2);
-        this.vehicle.applyEngineForce(force, 3);
+        // Apply forces to all wheels (4WD for maximum traction)
+        for (let i = 0; i < 4; i++) {
+            this.vehicle.applyEngineForce(force, i);
+            this.vehicle.setBrake(brake, i);
+        }
         // Apply Aerodynamic Downforce (keep it glued at speed)
         const downforce = spd * 100;
         this.chassisBody.applyForce(new CANNON.Vec3(0, -downforce, 0), new CANNON.Vec3(0, 0, 0));
@@ -260,14 +264,12 @@ export class Vehicle {
         this.vehicle.setSteeringValue(this.currentSteeringValue, 0);
         this.vehicle.setSteeringValue(this.currentSteeringValue, 1);
 
-        for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i);
-
         // ── Soft Y-floor ─────────────────────────────────────────────────────
         // Replaces the old hard teleport clamp. Gently lifts the chassis when
         // it sinks below the minimum ride height (suspension fully compressed).
         // This restores wheel-ground contact without the hill-jitter of a hard snap.
-        if (this.chassisBody.position.y < 0.55) {
-            this.chassisBody.position.y += (0.6 - this.chassisBody.position.y) * 0.4;
+        if (this.chassisBody.position.y < 0.65) {
+            this.chassisBody.position.y += (0.7 - this.chassisBody.position.y) * 0.5;
             if (this.chassisBody.velocity.y < 0) this.chassisBody.velocity.y = 1.0;
         }
 
@@ -277,12 +279,13 @@ export class Vehicle {
         // After 1.5 s we fire a small upward impulse to break it free.
         if (this.isOccupied && throttle && spd < 5) {
             this.stuckTimer += dt;
-            if (this.stuckTimer > 0.8) { // Faster trigger
-                this.chassisBody.applyImpulse(
-                    new CANNON.Vec3(0, 4500, 0),
-                    new CANNON.Vec3(0, 0, 0)
+            if (this.stuckTimer > 0.6) { 
+                const nudge = new CANNON.Vec3(
+                    (Math.random() - 0.5) * 5000,
+                    15000,
+                    (Math.random() - 0.5) * 5000
                 );
-                // Also give a tiny rotation nudge to un-wedge
+                this.chassisBody.applyImpulse(nudge, new CANNON.Vec3(0, 0, 0));
                 this.chassisBody.angularVelocity.set(0, 2, 0);
                 this.stuckTimer = 0;
             }
