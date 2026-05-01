@@ -38,6 +38,7 @@ export class Vehicle {
 
     private sound: Sound;
     private currentSteeringValue = 0;
+    private currentEngineForce   = 0;
     private speedBoostTimer      = 0;
     private speedBoostMultiplier = 1;
     // Stuck detection: counts seconds player is throttling but speed < 3 km/h
@@ -195,25 +196,28 @@ export class Vehicle {
         const ENGINE_FORCE = 3500 * gearRatio * this.speedBoostMultiplier; 
         const MAX_STEER    = Math.max(0.3, 0.6 - spd * 0.0035);
 
-        let force = 0, steer = 0, brake = 0;
+        let targetForce = 0, steer = 0, brake = 0;
         let throttle = false;
 
         if (this.isOccupied) {
             // Keyboard controls
-            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup')) { force = ENGINE_FORCE; throttle = true; }
+            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup')) { targetForce = ENGINE_FORCE; throttle = true; }
             if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown')) { 
-                if (spd > 5) brake = 1500;
-                else force = -ENGINE_FORCE * 0.6; 
+                if (spd > 5 && this.gear > 0) brake = 2500;
+                else targetForce = -ENGINE_FORCE * 0.6; 
             }
-            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft')) steer = MAX_STEER;
-            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
+            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft')) steer += MAX_STEER;
+            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer -= MAX_STEER;
             
             if (Input.isKeyDown(' ')) brake = 4000;
             
             // Touch controls
             if (TouchControls.active) {
-                if (TouchControls.gasPressed) { force = ENGINE_FORCE; throttle = true; }
-                if (TouchControls.brakePressed) { brake = 2500; }
+                if (TouchControls.gasPressed) { targetForce = ENGINE_FORCE; throttle = true; }
+                if (TouchControls.brakePressed) { 
+                    if (spd > 5) brake = 2500;
+                    else targetForce = -ENGINE_FORCE * 0.6;
+                }
                 if (Math.abs(TouchControls.moveX) > 0.1) {
                     steer = -TouchControls.moveX * MAX_STEER;
                 }
@@ -221,8 +225,11 @@ export class Vehicle {
 
             // Gamepad controls
             if (GamepadInput.connected) {
-                if (GamepadInput.rt > 0.05) { force =  ENGINE_FORCE * GamepadInput.rt; throttle = true; }
-                if (GamepadInput.lt > 0.05)   brake = 2500 * GamepadInput.lt;
+                if (GamepadInput.rt > 0.05) { targetForce =  ENGINE_FORCE * GamepadInput.rt; throttle = true; }
+                if (GamepadInput.lt > 0.05) {
+                    if (spd > 5) brake = 2500 * GamepadInput.lt;
+                    else targetForce = -ENGINE_FORCE * 0.6 * GamepadInput.lt;
+                }
                 if (Math.abs(GamepadInput.leftX) > 0.05) steer = -GamepadInput.leftX * MAX_STEER;
                 if (GamepadInput.btnLB) brake = 2500;
             }
@@ -234,9 +241,17 @@ export class Vehicle {
         } else {
             // When not occupied, apply a light brake so the car doesn't drift
             brake = 8;
-            force = 0;
+            targetForce = 0;
             this.taillightMats.forEach(m => m.emissive.setHex(0x220000));
         }
+
+        // Smooth acceleration and deceleration
+        if (!throttle && targetForce === 0 && spd > 1) {
+            // Natural rolling resistance
+            brake = Math.max(brake, 20);
+        }
+        
+        this.currentEngineForce += (targetForce - this.currentEngineForce) * Math.min(1, 5 * dt);
 
         // Lateral speed for drift detection
         _carFwd.set(0, 0, 1).applyQuaternion(
@@ -254,7 +269,7 @@ export class Vehicle {
         // Apply forces
         // Apply forces to all wheels (4WD for maximum traction)
         for (let i = 0; i < 4; i++) {
-            this.vehicle.applyEngineForce(force, i);
+            this.vehicle.applyEngineForce(this.currentEngineForce, i);
             this.vehicle.setBrake(brake, i);
         }
         // Apply Aerodynamic Downforce (keep it glued at speed)

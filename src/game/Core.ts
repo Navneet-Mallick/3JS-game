@@ -359,11 +359,11 @@ export class Core {
         this.scene.getScene().add(tracer);
         
         let life = 1.0;
-        const speed = 2.5;
+        const speed = 8.0;
         const animate = () => {
-            life -= 0.04;
+            life -= 0.05;
             tracer.position.add(direction.clone().multiplyScalar(speed));
-            tracer.scale.z = life * 3;
+            tracer.scale.z = life * 5;
             if (life > 0) requestAnimationFrame(animate);
             else this.scene.getScene().remove(tracer);
         };

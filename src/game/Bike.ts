@@ -30,6 +30,7 @@ export class Bike {
 
     private sound: Sound;
     private currentSteeringValue = 0;
+    private currentEngineForce   = 0;
     private speedBoostTimer      = 0;
     private speedBoostMultiplier = 1;
     private stuckTimer = 0;
@@ -161,20 +162,26 @@ export class Bike {
         const BRAKE_FORCE  = 180;
         const MAX_STEER    = Math.max(0.4, 0.8 - spd * 0.005);
 
-        let force = 0, steer = 0, brake = 0;
+        let targetForce = 0, steer = 0, brake = 0;
         let throttle = false, handbrake = false;
 
         if (this.isOccupied) {
-            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    { force =  ENGINE_FORCE; throttle = true; }
-            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  { force = -ENGINE_FORCE * 0.6; }
-            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  steer =  MAX_STEER;
-            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
+            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    { targetForce =  ENGINE_FORCE; throttle = true; }
+            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  { 
+                if (spd > 5) brake = BRAKE_FORCE;
+                else targetForce = -ENGINE_FORCE * 0.6; 
+            }
+            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  steer +=  MAX_STEER;
+            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer -= MAX_STEER;
             handbrake = Input.isKeyDown(' ');
-            brake = handbrake ? 500 : 0;
+            if (handbrake) brake = 500;
 
             if (TouchControls.active) {
-                if (TouchControls.gasPressed) { force = ENGINE_FORCE; throttle = true; }
-                if (TouchControls.brakePressed) { force = -ENGINE_FORCE * 0.6; }
+                if (TouchControls.gasPressed) { targetForce = ENGINE_FORCE; throttle = true; }
+                if (TouchControls.brakePressed) { 
+                    if (spd > 5) brake = BRAKE_FORCE;
+                    else targetForce = -ENGINE_FORCE * 0.6;
+                }
                 if (Math.abs(TouchControls.moveX) > 0.1) steer = -TouchControls.moveX * MAX_STEER;
             }
 
@@ -182,8 +189,13 @@ export class Bike {
             this.updateCamera(dt);
         } else {
             brake = 10;
-            force = 0;
+            targetForce = 0;
         }
+
+        if (!throttle && targetForce === 0 && spd > 1) {
+            brake = Math.max(brake, 15);
+        }
+        this.currentEngineForce += (targetForce - this.currentEngineForce) * Math.min(1, 6 * dt);
 
         _bikeFwd.set(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as unknown as THREE.Quaternion);
         
@@ -191,17 +203,22 @@ export class Bike {
         const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.chassisBody.quaternion as any);
         const worldUp = new THREE.Vector3(0, 1, 0);
         const tilt = currentUp.cross(worldUp);
-        const stabilityFactor = 800;
+        const stabilityFactor = 250; // Much lower for natural feel
         this.chassisBody.angularVelocity.x += tilt.x * stabilityFactor * dt;
         this.chassisBody.angularVelocity.z += tilt.z * stabilityFactor * dt;
+        
+        // Add leaning while steering
+        if (spd > 5) {
+            this.chassisBody.angularVelocity.z -= steer * 3.5 * dt;
+        }
 
         _vel.set(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
         this.lateralSpeed = _vel.clone().sub(_bikeFwd.clone().multiplyScalar(_vel.dot(_bikeFwd))).length();
 
         this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 15 * dt);
 
-        this.vehicle.applyEngineForce(force, 0);
-        this.vehicle.applyEngineForce(force, 1);
+        this.vehicle.applyEngineForce(this.currentEngineForce, 0);
+        this.vehicle.applyEngineForce(this.currentEngineForce, 1);
         for (let i = 0; i < 2; i++) this.vehicle.setBrake(brake, i);
         const downforce = spd * 25;
         this.chassisBody.applyForce(new CANNON.Vec3(0, -downforce, 0), new CANNON.Vec3(0, 0, 0));

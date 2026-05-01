@@ -365,9 +365,9 @@ export class Player {
                         
                         // Calculate bullet direction (where player is looking)
                         const direction = new THREE.Vector3(
-                            Math.sin(this.yaw) * Math.cos(this.pitch),
+                            -Math.sin(this.yaw) * Math.cos(this.pitch),
                             -Math.sin(this.pitch),
-                            Math.cos(this.yaw) * Math.cos(this.pitch)
+                            -Math.cos(this.yaw) * Math.cos(this.pitch)
                         ).normalize();
                         
                         // Fire the bullet
