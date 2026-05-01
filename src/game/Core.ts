@@ -21,6 +21,11 @@ import { Bomb }          from './Bomb';
 import { MusicSystem }   from './MusicSystem';
 import { WeaponSystem }  from './WeaponSystem';
 import { AssetManager }  from './AssetManager';
+import { EconomyManager } from './Economy';
+import { EntityManager } from './EntityManager';
+import { MissionManager, MissionStatus } from './MissionSystem';
+import { TriggerZone } from './TriggerZone';
+import { events, GameEvents } from './Events';
 
 const _dp = new THREE.Vector3();
 
@@ -31,18 +36,12 @@ export class Core {
     private vehicle:     Vehicle;
     private bike:        Bike;
     private city:        City;
-    private traffic:     TrafficCar[] = [];
-    private police:      Police[] = [];
-    private pedestrians: Pedestrian[] = [];
-    private minimap:     Minimap;
-    private sound:       Sound;
-    private wantedLevel: WantedLevel;
-    private crimeSystem: CrimeSystem;
-    private cheatSystem: CheatSystem;
-    private bombs: Bomb[] = [];
     private musicSystem: MusicSystem;
     private weaponSystem: WeaponSystem;
     public assetManager: AssetManager;
+    public economy: EconomyManager;
+    public entityManager: EntityManager;
+    public missionManager: MissionManager;
     
     // Reusable raycaster for bullets (performance optimization)
     private bulletRaycaster = new THREE.Raycaster();
@@ -105,33 +104,15 @@ export class Core {
                 this.sound
             );
 
-            const trafficSpawns: [number, number, number][] = [
-                [ 30, 0,  0], [-30, 0,  0],
-                [  0, 0, 30], [  0, 0, -30],
-                [ 55, 0, 55], [-55, 0,  55],
-            ];
-            for (const [x, y, z] of trafficSpawns) {
-                this.traffic.push(new TrafficCar(
-                    this.scene.getScene(),
-                    this.physics.getWorld(),
-                    new CANNON.Vec3(x, y, z)
-                ));
-            }
+            this.economy = new EconomyManager();
+            this.entityManager = new EntityManager(this.scene.getScene(), this.physics.getWorld());
+            this.entityManager.setPlayer(this.player, () => this.flashDamage());
+            this.missionManager = new MissionManager();
 
-            // Spawn police cars
-            const policeSpawns: [number, number, number][] = [
-                [ 50, 0, -50], [-50, 0, -50],
-                [ 50, 0,  50], [-50, 0,  50],
-            ];
-            for (const [x, y, z] of policeSpawns) {
-                this.police.push(new Police(
-                    this.scene.getScene(),
-                    this.physics.getWorld(),
-                    new CANNON.Vec3(x, y, z)
-                ));
-            }
+            this.setupMissions();
 
             this.wantedLevel = new WantedLevel(this.scene.getScene());
+            this.crimeSystem = new CrimeSystem(this.wantedLevel);
 
             this.crimeSystem = new CrimeSystem(this.wantedLevel);
 
@@ -164,26 +145,10 @@ export class Core {
                 if (e.key.toLowerCase() === 'n') this.musicSystem.nextTrack();
             });
 
-            const pedSpawns: [number, number, number][] = [
-                [10, 0, 10], [-10, 0, 10], [10, 0, -10], [-10, 0, -10],
-                [20, 0, 0],  [-20, 0, 0],
-            ];
-            for (const [x, y, z] of pedSpawns) {
-                this.pedestrians.push(new Pedestrian(
-                    this.scene.getScene(),
-                    null,
-                    new THREE.Vector3(x, y, z)
-                ));
-            }
+            this.minimap = new Minimap('minimap-canvas');
 
-            // Wire up police shooting
-            for (const p of this.police) {
-                p.onShoot = (dmg) => {
-                    if (!this.playerInVehicle) {
-                        this.player.health -= dmg;
-                    }
-                };
-            }
+            // Note: Police shooting is now handled in update via EntityManager
+            // but we can add more specific event-based logic here later.
 
             this.minimap = new Minimap('minimap-canvas');
             this.player.onSpeedBoost = () => this.vehicle.boostSpeed();
@@ -284,8 +249,8 @@ export class Core {
         let hitSomething = false;
         let hitPosition: THREE.Vector3 | null = null;
         
-        for (let i = 0; i < this.pedestrians.length; i++) {
-            const ped = this.pedestrians[i];
+        for (let i = 0; i < this.entityManager.pedestrians.length; i++) {
+            const ped = this.entityManager.pedestrians[i];
             if (ped.isDead || !ped.mesh.visible) continue;
             
             // Simple distance check first (optimization)
@@ -306,6 +271,7 @@ export class Core {
                 if (killed) {
                     this.wantedLevel.addWantedLevel(2);
                     this.spawnDynamicPickup(pedPos);
+                    this.economy.addMoney(20); // Reward for chaos
                 } else {
                     this.wantedLevel.addWantedLevel(1);
                 }
@@ -314,7 +280,7 @@ export class Core {
         }
         
         // Check hits on traffic and police
-        const allVehicles = [...this.traffic, ...this.police];
+        const allVehicles = [...this.entityManager.traffic, ...this.entityManager.police];
         for (let i = 0; i < allVehicles.length; i++) {
             const v = allVehicles[i];
             if (v.isDead) continue;
@@ -539,7 +505,7 @@ export class Core {
             }
 
             // Check all police cars
-            for (const p of this.police) {
+            for (const p of this.entityManager.police) {
                 const pp2 = p.getPosition();
                 _dp.set(pp.x - pp2.x, pp.y - pp2.y, pp.z - pp2.z);
                 if (_dp.lengthSq() < 25) {
@@ -687,7 +653,7 @@ export class Core {
 
     private handleBusted(dt: number) {
         if (this.playerInVehicle) return;
-        for (const p of this.police) {
+        for (const p of this.entityManager.police) {
             if (p.isDead) continue;
             const dist = p.getPosition().distanceTo(this.player.getPosition());
             const spd  = p.getSpeedKmh();
@@ -717,9 +683,15 @@ export class Core {
         }
 
         // FIX: compute dt at the very top so every code path below can use it safely
-        const dt  = Math.min(0.05, (time - this.lastTime) / 1000);
-        const now = time;
+        let dt = Math.min(0.05, (time - this.lastTime) / 1000);
         this.lastTime = time;
+
+        // Slow motion on death
+        if (this.player.health <= 0) {
+            dt *= 0.1;
+        }
+
+        const now = time;
 
         // Tick the enter/exit cooldown (needs dt, must be before handleEnterExit)
         if (this.enterExitCooldown > 0) this.enterExitCooldown -= dt;
@@ -741,9 +713,7 @@ export class Core {
             this.player.setPosition(rv.getPosition().x + 3, rv.getPosition().y + 2, rv.getPosition().z);
         }
 
-        this.wantedLevel.update(dt);
-        this.crimeSystem.update(dt);
-        this.musicSystem.update(dt);
+        this.missionManager.update(dt);
         this.updateHUD(dt);
         this.handleBusted(dt);
 
@@ -761,7 +731,7 @@ export class Core {
             // Apply damage logic when bomb explodes
             bomb.onExplode = (pos) => {
                 // Damage pedestrians
-                this.pedestrians.forEach(p => {
+                this.entityManager.pedestrians.forEach(p => {
                     if (p.isDead) return;
                     const dist = p.getPosition().distanceTo(pos);
                     if (dist < 15) {
@@ -769,13 +739,15 @@ export class Core {
                         if (killed) {
                             this.spawnDynamicPickup(p.getPosition());
                             this.wantedLevel.addWantedLevel(2);
+                            this.economy.addMoney(50);
                         }
                     }
 
                 });
                 
                 // Damage vehicles
-                [...this.traffic, ...this.police].forEach(v => {
+                const allVehicles = [...this.entityManager.traffic, ...this.entityManager.police];
+                allVehicles.forEach(v => {
                     const dist = v.getPosition().distanceTo(pos);
                     if (dist < 18) v.takeDamage(100);
                 });
@@ -790,6 +762,7 @@ export class Core {
                 const playerDist = this.player.getPosition().distanceTo(pos);
                 if (playerDist < 12) {
                     this.player.health -= (12 - playerDist) * 8;
+                    this.flashDamage();
                 }
             };
             
@@ -805,141 +778,32 @@ export class Core {
 
         this.physics.update(dt);
 
-        // ── KEY FIX: player and vehicle are mutually exclusive ──
-        if (!this.playerInVehicle) {
-            this.player.update(dt);   // player controls camera on foot
-        }
-        
-        // Update both vehicles
-        this.vehicle.update(dt);
-        this.bike.update(dt);
-
-        // ── World boundary clamp ─────────────────────────────────────────────
-        // Safety net: if anything escapes the city bounds (±230 units) send it
-        // back to spawn. This catches edge cases where the broadphase fix above
-        // isn't enough (e.g. very high speed launches over the city edge).
-        const WORLD_LIMIT = 230;
-        if (this.playerInVehicle) {
-            const cv = this.currentVehicle === 'bike' ? this.bike : (this.currentVehicle === 'traffic' ? this.occupiedTrafficCar! : this.vehicle);
-            const cp = cv.chassisBody.position;
-            if (Math.abs(cp.x) > WORLD_LIMIT || Math.abs(cp.z) > WORLD_LIMIT) {
-                cv.resetPosition();
-                this.player.setPosition(5, 2, 3);
-            }
-        } else {
-            const pp = this.player.body.position;
-            if (Math.abs(pp.x) > WORLD_LIMIT || Math.abs(pp.z) > WORLD_LIMIT) {
-                this.player.setPosition(0, 2, 0);
-            }
-        }
-
-        // Reference position for LOD and UI
+        // ── Entity and System Updates ──────────────────────────────────────────
         const playerPos = this.playerInVehicle
             ? (this.currentVehicle === 'bike' ? this.bike.getPosition() : this.vehicle.getPosition())
             : this.player.getPosition();
 
-        // Traffic LOD
-        for (let i = 0; i < this.traffic.length; i++) {
-            const t = this.traffic[i];
-            _dp.set(
-                t.getPosition().x - playerPos.x,
-                0,
-                t.getPosition().z - playerPos.z
-            );
-            if (_dp.lengthSq() < 16900) t.update(dt); // 130²
+        this.entityManager.update(dt, playerPos, this.player.body.velocity as any, this.wantedLevel.isWanted());
+        this.wantedLevel.update(dt);
+        this.crimeSystem.update(dt);
+        this.musicSystem.update(dt);
+
+        if (!this.playerInVehicle) {
+            this.player.update(dt);
         }
+        this.vehicle.update(dt);
+        this.bike.update(dt);
 
-        // Pedestrian LOD
-        for (let i = 0; i < this.pedestrians.length; i++) {
-            const p = this.pedestrians[i];
-            _dp.set(
-                p.getPosition().x - playerPos.x,
-                0,
-                p.getPosition().z - playerPos.z
-            );
-            if (_dp.lengthSq() < 10000) p.update(dt, playerPos); // 100²
-        }
-
-        // Police update — single pass, no duplicate wantedLevel.update
-        const isWanted = this.wantedLevel.isWanted();
-        for (let i = 0; i < this.police.length; i++) {
-            const p  = this.police[i];
-            const pPos = p.getPosition();
-            const dSq  = pPos.distanceToSquared(playerPos);
-
-            // Respawn far police near player when wanted
-            if (isWanted && dSq > 40000) {
-                const angle = Math.random() * Math.PI * 2;
-                const dist  = 60 + Math.random() * 40;
-                p.chassisBody.position.set(
-                    playerPos.x + Math.sin(angle) * dist, 3,
-                    playerPos.z + Math.cos(angle) * dist
-                );
-                p.chassisBody.velocity.set(0, 0, 0);
-                p.stopChase();
-            }
-
-            if (dSq < 32400) p.update(dt, playerPos, isWanted); // 180m
-        }
-
-        // Check for crimes
+        // ── World boundary clamp ─────────────────────────────────────────────
+        const WORLD_LIMIT = 230;
         if (this.playerInVehicle) {
-            const speed = this.vehicle.getSpeedKmh();
-            const lateralSpeed = this.vehicle.lateralSpeed;
-
-            // Speeding
-            this.crimeSystem.checkSpeeding(speed);
-
-            // Reckless driving
-            this.crimeSystem.recklessDriving(lateralSpeed);
-
-            // Check collisions with pedestrians
-            for (let i = 0; i < this.pedestrians.length; i++) {
-                const p = this.pedestrians[i];
-                if (p.isDead) continue;
-                const pPos = p.getPosition();
-                _dp.set(playerPos.x - pPos.x, 0, playerPos.z - pPos.z);
-                if (_dp.lengthSq() < 4) { // 2 unit radius
-                    this.crimeSystem.hitPedestrianWithVehicle(p, speed);
-                }
+            const cv = this.currentVehicle === 'bike' ? this.bike : (this.currentVehicle === 'traffic' ? this.occupiedTrafficCar! : this.vehicle);
+            if (Math.abs(cv.chassisBody.position.x) > WORLD_LIMIT || Math.abs(cv.chassisBody.position.z) > WORLD_LIMIT) {
+                cv.resetPosition();
+                this.player.setPosition(5, 2, 3);
             }
-        }
-        
-        // Remove police update from here as it's merged above
-
-        // Pedestrian update (with cleanup of dead ones)
-        for (let i = this.pedestrians.length - 1; i >= 0; i--) {
-            const p = this.pedestrians[i];
-            
-            // If dead and player is far away, remove from scene
-            if (p.isDead) {
-                const distSq = p.getPosition().distanceToSquared(playerPos);
-                if (distSq > 2500) { // 50m
-                    this.scene.getScene().remove(p.mesh);
-                    this.pedestrians.splice(i, 1);
-                    continue;
-                }
-            }
-
-            _dp.set(
-                p.getPosition().x - playerPos.x,
-                0,
-                p.getPosition().z - playerPos.z
-            );
-            const near = _dp.lengthSq() < 10000; // 100²
-            p.mesh.visible = near;
-            if (near) p.update(dt, playerPos);
-        }
-        
-        // Spawn new pedestrians if count is low
-        if (this.pedestrians.length < 12 && Math.random() < 0.01) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 50 + Math.random() * 30;
-            this.pedestrians.push(new Pedestrian(
-                this.scene.getScene(),
-                null,
-                new THREE.Vector3(playerPos.x + Math.sin(angle) * dist, 0, playerPos.z + Math.cos(angle) * dist)
-            ));
+        } else if (Math.abs(this.player.body.position.x) > WORLD_LIMIT || Math.abs(this.player.body.position.z) > WORLD_LIMIT) {
+            this.player.setPosition(0, 2, 0);
         }
 
         // Update bombs
@@ -1000,14 +864,14 @@ export class Core {
                 const nearBike = _dp.lengthSq() < 25;
 
                 let nearTraffic = false;
-                for (const t of this.traffic) {
+                for (const t of this.entityManager.traffic) {
                     const tp = t.getPosition();
                     _dp.set(pp.x - tp.x, pp.y - tp.y, pp.z - tp.z);
                     if (_dp.lengthSq() < 25) { nearTraffic = true; break; }
                 }
                 
                 if (!nearTraffic) {
-                    for (const p of this.police) {
+                    for (const p of this.entityManager.police) {
                         const pp2 = p.getPosition();
                         _dp.set(pp.x - pp2.x, pp.y - pp2.y, pp.z - pp2.z);
                         if (_dp.lengthSq() < 25) { nearTraffic = true; break; }
@@ -1024,5 +888,44 @@ export class Core {
         this.scene.render();
         Input.clearPerFrameData();
         TouchControls.clearFrame();
+    }
+
+    private setupMissions() {
+        const startPos = new THREE.Vector3(20, 0, 20);
+        const trigger = new TriggerZone(this.scene.getScene(), startPos, 3);
+        
+        trigger.onEnter = () => {
+            this.missionManager.startMission('delivery_1');
+            trigger.setVisible(false);
+        };
+
+        this.missionManager.addMission({
+            id: 'delivery_1',
+            name: 'Fast Delivery',
+            description: 'Get to the other side of town in under 60 seconds.',
+            reward: 500,
+            status: MissionStatus.AVAILABLE,
+            startPosition: startPos,
+            update: (dt) => {
+                const targetPos = new THREE.Vector3(-100, 0, -100);
+                // Check if player reached target
+                if (this.player.getPosition().distanceTo(targetPos) < 10) {
+                    this.missionManager.completeMission();
+                    this.economy.addMoney(500);
+                }
+            }
+        });
+
+        // Add to update loop via a manual check or trigger.update
+        events.on(GameEvents.TICK, (dt: number) => {
+            trigger.update(this.player.getPosition());
+        });
+    }
+    private flashDamage() {
+        const el = document.getElementById('damage-overlay');
+        if (el) {
+            el.classList.add('flash');
+            setTimeout(() => el.classList.remove('flash'), 150);
+        }
     }
 }

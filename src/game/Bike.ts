@@ -1,297 +1,118 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { Input } from './Input';
-import { GamepadInput } from './Gamepad';
+import { BaseVehicle, VehicleStats } from './BaseVehicle';
 import { Sound } from './Sound';
-import { TouchControls } from './TouchControls';
 
-const _bikeFwd    = new THREE.Vector3();
-const _vel        = new THREE.Vector3();
-const _camTarget  = new THREE.Vector3();
-const _camPos     = new THREE.Vector3();
+const BIKE_STATS: VehicleStats = {
+    name: 'PCJ-600',
+    mass: 250,
+    engineForce: 1500,
+    maxSteer: 0.6,
+    maxSpeed: 180,
+    brakingForce: 50,
+    maxHealth: 80,
+    suspensionStiffness: 45
+};
 
-export class Bike {
-    private scene:  THREE.Scene;
-    private camera: THREE.PerspectiveCamera;
-
-    public  chassisMesh: THREE.Group;
-    public  chassisBody: CANNON.Body;
-    private vehicle:     CANNON.RaycastVehicle;
-    private wheelMeshes: THREE.Group[] = [];
-
-    public isOccupied   = false;
-    public lateralSpeed = 0;
-
-    // Camera
-    private camYaw         = Math.PI;
-    private camPitch       = 0.28;
-    private readonly CAM_DIST = 6; 
-    private mouseIdleTimer = 0;
-
-    private sound: Sound;
-    private currentSteeringValue = 0;
-    private currentEngineForce   = 0;
-    private speedBoostTimer      = 0;
-    private speedBoostMultiplier = 1;
-    private stuckTimer = 0;
-    private smoothedY            = 0;
-
+export class Bike extends BaseVehicle {
     constructor(
-        scene:    THREE.Scene,
-        world:    CANNON.World,
-        camera:   THREE.PerspectiveCamera,
+        scene: THREE.Scene,
+        world: CANNON.World,
+        camera: THREE.PerspectiveCamera,
         position: CANNON.Vec3,
-        sound:    Sound
+        sound: Sound
     ) {
-        this.sound  = sound;
-        this.scene  = scene;
-        this.camera = camera;
+        super(scene, world, camera, position, sound, BIKE_STATS);
+    }
 
+    protected initPhysics(position: CANNON.Vec3) {
         const chassisShape = new CANNON.Box(new CANNON.Vec3(0.3, 0.4, 0.9));
-        this.chassisBody = new CANNON.Body({ mass: 200, shape: chassisShape });
+        this.chassisBody = new CANNON.Body({ mass: this.stats.mass, shape: chassisShape });
         this.chassisBody.position.set(position.x, position.y + 1.0, position.z);
-        this.chassisBody.linearDamping  = 0.1; // Smoother coasting
-        this.chassisBody.angularDamping = 0.65; // Slightly more stable
-        world.addBody(this.chassisBody);
-
-        this.smoothedY = position.y;
-
-        this.chassisMesh = this.buildBikeModel();
-        this.scene.add(this.chassisMesh);
+        this.chassisBody.linearDamping = 0.1;
+        this.chassisBody.angularDamping = 0.65;
+        this.world.addBody(this.chassisBody);
 
         this.vehicle = new CANNON.RaycastVehicle({
-            chassisBody:      this.chassisBody,
+            chassisBody: this.chassisBody,
             indexForwardAxis: 2,
-            indexRightAxis:   0,
-            indexUpAxis:      1,
+            indexRightAxis: 0,
+            indexUpAxis: 1,
         });
 
         const wheelOpts = {
-            radius:                         0.32,
-            directionLocal:                 new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness: 45, // Softer for bumps
+            radius: 0.32,
+            directionLocal: new CANNON.Vec3(0, -1, 0),
+            suspensionStiffness: this.stats.suspensionStiffness,
             suspensionRestLength: 0.35,
-            frictionSlip: 2.2, // More forgiving drift
+            frictionSlip: 2.5,
             dampingRelaxation: 5.0,
             dampingCompression: 7.0,
             maxSuspensionForce: 100000,
             rollInfluence: 0.001,
-            axleLocal:                      new CANNON.Vec3(1, 0, 0),
-            chassisConnectionPointLocal:    new CANNON.Vec3(0, 0, 0),
-            maxSuspensionTravel:            0.25,
-            customSlidingFrictionWheelStep: 1,
+            axleLocal: new CANNON.Vec3(1, 0, 0),
+            chassisConnectionPointLocal: new CANNON.Vec3(0, 0, 0),
+            maxSuspensionTravel: 0.25,
         };
 
-        const wPos = [
-            [0, -0.2,  0.7],  // Front wheel
-            [0, -0.2, -0.7],  // Rear wheel
-        ];
-        
-        wPos.forEach(([x, y, z]) => {
-            wheelOpts.chassisConnectionPointLocal.set(x, y, z);
-            this.vehicle.addWheel({ ...wheelOpts });
-            const wm = this.buildWheelModel();
-            this.wheelMeshes.push(wm);
-            this.scene.add(wm);
+        const wPos = [[0, -0.2, 0.7], [0, -0.2, -0.7]];
+        wPos.forEach(p => {
+            wheelOpts.chassisConnectionPointLocal.set(p[0], p[1], p[2]);
+            this.vehicle.addWheel(wheelOpts);
         });
 
-        this.vehicle.addToWorld(world);
+        this.vehicle.addToWorld(this.world);
     }
 
-    private buildBikeModel(): THREE.Group {
-        const g = new THREE.Group();
-        const bikeMetal = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-        const bikeSeat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-        const bikeChrome = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+    protected initModel() {
+        this.chassisMesh = new THREE.Group();
+        const bodyGeo = new THREE.BoxGeometry(0.5, 0.8, 1.8);
+        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x0066ff });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.castShadow = true;
+        this.chassisMesh.add(body);
 
-        const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x=0, y=0, z=0, rx=0) => {
-            const m = new THREE.Mesh(geo, mat);
-            m.position.set(x, y, z);
-            if (rx) m.rotation.x = rx;
-            m.castShadow = true;
-            g.add(m);
-            return m;
-        };
+        this.scene.add(this.chassisMesh);
 
-        add(new THREE.BoxGeometry(0.15, 0.3, 1.4), bikeMetal, 0, 0, 0);
-        add(new THREE.BoxGeometry(0.35, 0.25, 0.5), bikeMetal, 0, 0.2, 0.2);
-        add(new THREE.BoxGeometry(0.4, 0.15, 0.6), bikeSeat, 0, 0.3, -0.3);
-        add(new THREE.BoxGeometry(0.6, 0.05, 0.05), bikeChrome, 0, 0.4, 0.6);
-        add(new THREE.BoxGeometry(0.08, 0.5, 0.08), bikeChrome, 0, -0.15, 0.7);
-        add(new THREE.BoxGeometry(0.08, 0.4, 0.08), bikeChrome, 0, -0.1, -0.7);
-
-        return g;
-    }
-
-    private static _tireGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.15, 12);
-    private static _rimGeo  = new THREE.CylinderGeometry(0.18, 0.18, 0.16, 8);
-    private static _tireMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
-    private static _rimMat  = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
-
-    private buildWheelModel(): THREE.Group {
-        const g    = new THREE.Group();
-        const tire = new THREE.Mesh(Bike._tireGeo, Bike._tireMat);
-        tire.rotation.z = Math.PI / 2;
-        g.add(tire);
-        const rim = new THREE.Mesh(Bike._rimGeo, Bike._rimMat);
-        rim.rotation.z = Math.PI / 2;
-        g.add(rim);
-        return g;
-    }
-
-    public initCamera(yaw: number, pitch: number) {
-        this.camYaw   = yaw;
-        this.camPitch = Math.max(0.05, Math.min(0.6, pitch));
-        this.mouseIdleTimer = 0;
-    }
-
-    public update(dt: number) {
-        this.chassisMesh.position.copy(this.chassisBody.position as unknown as THREE.Vector3);
-        this.chassisMesh.quaternion.copy(this.chassisBody.quaternion as unknown as THREE.Quaternion);
-
+        // Wheels
+        const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.2, 12);
+        wheelGeo.rotateZ(Math.PI / 2);
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
         for (let i = 0; i < 2; i++) {
-            this.vehicle.updateWheelTransform(i);
-            const t = this.vehicle.wheelInfos[i].worldTransform;
-            this.wheelMeshes[i].position.copy(t.position as unknown as THREE.Vector3);
-            this.wheelMeshes[i].quaternion.copy(t.quaternion as unknown as THREE.Quaternion);
-        }
-
-        const spd = this.getSpeedKmh();
-
-        if (this.speedBoostTimer > 0) { this.speedBoostTimer -= dt; this.speedBoostMultiplier = 1.6; }
-        else                          { this.speedBoostMultiplier = 1.0; }
-
-        const ENGINE_FORCE = 1800 * this.speedBoostMultiplier;
-        const BRAKE_FORCE  = 180;
-        const MAX_STEER    = Math.max(0.4, 0.8 - spd * 0.005);
-
-        let targetForce = 0, targetSteer = 0, brake = 0;
-        let throttle = false, handbrake = false;
-
-        if (this.isOccupied) {
-            if (Input.isKeyDown('w') || Input.isKeyDown('arrowup'))    { targetForce =  ENGINE_FORCE; throttle = true; }
-            if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown'))  { 
-                if (spd > 5) brake = BRAKE_FORCE;
-                else targetForce = -ENGINE_FORCE * 0.6; 
-            }
-            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  targetSteer -=  MAX_STEER;
-            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) targetSteer += MAX_STEER;
-            handbrake = Input.isKeyDown(' ');
-            if (handbrake) brake = 500;
-
-            if (TouchControls.active) {
-                if (TouchControls.gasPressed) { targetForce = ENGINE_FORCE; throttle = true; }
-                if (TouchControls.brakePressed) { 
-                    if (spd > 5) brake = BRAKE_FORCE;
-                    else targetForce = -ENGINE_FORCE * 0.6;
-                }
-                if (Math.abs(TouchControls.moveX) > 0.1) targetSteer = -TouchControls.moveX * MAX_STEER;
-            }
-
-            this.sound.updateEngine(spd * 0.7, throttle);
-            this.updateCamera(dt);
-        } else {
-            brake = 10;
-            targetForce = 0;
-        }
-
-        if (!throttle && targetForce === 0 && spd > 1) {
-            brake = Math.max(brake, 15);
-        }
-        this.currentEngineForce += (targetForce - this.currentEngineForce) * Math.min(1, 10 * dt);
-
-        _bikeFwd.set(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as unknown as THREE.Quaternion);
-        
-        // --- Active Stabilization ---
-        const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.chassisBody.quaternion as any);
-        const worldUp = new THREE.Vector3(0, 1, 0);
-        const tilt = currentUp.cross(worldUp);
-        const stabilityFactor = 400; // Balanced for responsive but natural feel
-        this.chassisBody.angularVelocity.x += tilt.x * stabilityFactor * dt;
-        this.chassisBody.angularVelocity.z += tilt.z * stabilityFactor * dt;
-        
-        // Add leaning while steering
-        if (spd > 5) {
-            this.chassisBody.angularVelocity.z -= targetSteer * 3.5 * dt;
-        }
-
-        _vel.set(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
-        this.lateralSpeed = _vel.clone().sub(_bikeFwd.clone().multiplyScalar(_vel.dot(_bikeFwd))).length();
-
-        const steerSpeed = (targetSteer === 0) ? 6 : 12;
-        this.currentSteeringValue += (targetSteer - this.currentSteeringValue) * Math.min(1, steerSpeed * dt);
-
-        this.vehicle.applyEngineForce(this.currentEngineForce, 0);
-        this.vehicle.applyEngineForce(this.currentEngineForce, 1);
-        for (let i = 0; i < 2; i++) this.vehicle.setBrake(brake, i);
-        const downforce = spd * 25;
-        this.chassisBody.applyForce(new CANNON.Vec3(0, -downforce, 0), new CANNON.Vec3(0, 0, 0));
-        this.vehicle.setSteeringValue(this.currentSteeringValue, 0);
-
-        if (handbrake) {
-            this.vehicle.setBrake(0, 0);
-            this.vehicle.setBrake(BRAKE_FORCE * 6, 1);
-        } else {
-            for (let i = 0; i < 2; i++) this.vehicle.setBrake(brake, i);
-        }
-
-        if (this.chassisBody.position.y < 0.4) {
-            this.chassisBody.position.y += (0.5 - this.chassisBody.position.y) * 0.4;
-            if (this.chassisBody.velocity.y < 0) this.chassisBody.velocity.y = 1.0;
-        }
-
-        if (this.isOccupied && throttle && spd < 4) {
-            this.stuckTimer += dt;
-            if (this.stuckTimer > 0.6) {
-                const nudge = new CANNON.Vec3((Math.random()-0.5)*2000, 8000, (Math.random()-0.5)*2000);
-                this.chassisBody.applyImpulse(nudge, new CANNON.Vec3(0,0,0));
-                this.stuckTimer = 0;
-            }
-        } else {
-            this.stuckTimer = 0;
+            const w = new THREE.Mesh(wheelGeo, wheelMat);
+            const g = new THREE.Group();
+            g.add(w);
+            this.wheelMeshes.push(g);
+            this.scene.add(g);
         }
     }
 
-    private updateCamera(dt: number) {
-        if (Input.movementX !== 0 || Input.movementY !== 0) {
-            this.camYaw -= Input.movementX * 0.003;
-            this.camPitch -= Input.movementY * 0.003;
-            this.camPitch = Math.max(0.05, Math.min(0.6, this.camPitch));
-            this.mouseIdleTimer = 1.8;
-        }
-        if (this.mouseIdleTimer > 0) this.mouseIdleTimer -= dt;
-        else {
-            _bikeFwd.set(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as unknown as THREE.Quaternion);
-            const targetYaw = Math.atan2(_bikeFwd.x, _bikeFwd.z) + Math.PI;
-            let diff = targetYaw - this.camYaw;
-            while (diff > Math.PI) diff -= Math.PI * 2;
-            while (diff < -Math.PI) diff += Math.PI * 2;
-            this.camYaw += diff * Math.min(1, 4 * dt); // Silky auto-align
-        }
+    protected handleInput(dt: number) {
+        super.handleInput(dt);
         
-        this.smoothedY += (this.chassisMesh.position.y - this.smoothedY) * Math.min(1, 8 * dt);
-        
-        _camTarget.set(this.chassisMesh.position.x, this.smoothedY + 1, this.chassisMesh.position.z);
-        _camPos.set(_camTarget.x + this.CAM_DIST * Math.sin(this.camYaw) * Math.cos(this.camPitch), _camTarget.y + this.CAM_DIST * Math.sin(this.camPitch), _camTarget.z + this.CAM_DIST * Math.cos(this.camYaw) * Math.cos(this.camPitch));
-        const lerpT = 1 - Math.pow(1 - 0.15, 60 * dt); // Cinematic tracking
-        this.camera.position.lerp(_camPos, lerpT);
-        this.camera.lookAt(_camTarget);
+        // Stabilize bike — prevent tipping over too much
+        const rot = this.chassisBody.quaternion;
+        const euler = new THREE.Euler().setFromQuaternion(rot as any);
+        // Apply counter-force to keep upright
+        this.chassisBody.angularVelocity.z -= euler.z * 0.5;
+        this.chassisBody.angularVelocity.x -= euler.x * 0.5;
     }
 
-    public getPosition() { return this.chassisMesh.position; }
-    public setVisible(v: boolean) {
-        this.chassisMesh.visible = v;
-        this.wheelMeshes.forEach(w => w.visible = v);
+    protected applyEngineForce(force: number) {
+        // Rear wheel drive for bikes
+        this.vehicle.applyEngineForce(force, 1);
     }
-    public getSpeedKmh(): number {
-        const v = this.chassisBody.velocity;
-        return Math.round(Math.sqrt(v.x * v.x + v.z * v.z) * 3.6);
+
+    protected updateCamera(dt: number) {
+        const target = new THREE.Vector3().copy(this.chassisBody.position as any);
+        const offset = new THREE.Vector3(0, 2, -5).applyQuaternion(this.chassisMesh.quaternion);
+        this.camera.position.lerp(target.add(offset), 0.15);
+        this.camera.lookAt(this.chassisBody.position as any);
     }
+
     public resetPosition() {
-        this.chassisBody.position.y += 2;
-        this.chassisBody.velocity.set(0,0,0);
-        this.chassisBody.angularVelocity.set(0,0,0);
-        this.chassisBody.quaternion.set(0,0,0,1);
+        this.chassisBody.position.y += 1;
+        this.chassisBody.quaternion.set(0, 0, 0, 1);
+        this.chassisBody.velocity.set(0, 0, 0);
     }
-    public takeDamage(d: number) { return false; }
 }

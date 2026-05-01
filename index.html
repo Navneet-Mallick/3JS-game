@@ -209,6 +209,38 @@
         font-weight: 700;
       }
 
+      /* Economy — top right below wanted */
+      #money-container {
+        position: absolute; top: 100px; right: 20px;
+        color: #00ff88; font-size: 2rem; font-weight: 700;
+        text-shadow: 0 0 15px rgba(0, 255, 136, 0.6);
+        font-family: 'Outfit', sans-serif;
+        letter-spacing: 1px;
+        animation: moneyPulse 1s ease-out;
+      }
+      @keyframes moneyPulse {
+        0% { transform: scale(1.2); filter: brightness(1.5); }
+        100% { transform: scale(1); filter: brightness(1); }
+      }
+
+      /* Mission Notification */
+      #mission-notification {
+        position: absolute; top: 180px; left: 50%; transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.85); 
+        padding: 20px 40px; border-radius: 8px;
+        border-left: 5px solid #ffcc00;
+        color: #fff; text-align: center;
+        display: none; z-index: 50;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      }
+      #mission-notification.visible { display: block; animation: slideDownFade 0.5s ease-out; }
+      @keyframes slideDownFade {
+        from { transform: translateX(-50%) translateY(-50px); opacity: 0; }
+        to { transform: translateX(-50%) translateY(0); opacity: 1; }
+      }
+      #mission-notification h3 { color: #ffcc00; margin-bottom: 5px; letter-spacing: 2px; }
+
       /* Weapon Info — bottom right, below speedometer */
       #weapon-info {
         position: absolute; bottom: 160px; right: 20px;
@@ -348,9 +380,33 @@
         padding: 4px 10px; border-radius: 4px; font-size: 0.7rem; cursor: pointer;
         pointer-events: all;
       }
+      /* Damage Overlay */
+      #damage-overlay {
+        position: fixed; inset: 0;
+        pointer-events: none;
+        box-shadow: inset 0 0 100px rgba(255, 0, 0, 0);
+        z-index: 100;
+        transition: box-shadow 0.2s;
+      }
+      #damage-overlay.flash {
+        box-shadow: inset 0 0 150px rgba(255, 0, 0, 0.6);
+      }
+
+      /* CRT / Scanline Effect (subtle) */
+      .scanlines {
+        position: fixed; inset: 0;
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                    linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+        background-size: 100% 3px, 3px 100%;
+        pointer-events: none;
+        z-index: 99;
+        opacity: 0.2;
+      }
     </style>
   </head>
   <body>
+    <div id="damage-overlay"></div>
+    <div class="scanlines"></div>
     <div id="app">
 
       <!-- Loading -->
@@ -422,6 +478,15 @@
         <!-- Minimap -->
         <div class="minimap-container">
           <canvas id="minimap-canvas" width="120" height="120"></canvas>
+        </div>
+
+        <!-- Economy -->
+        <div id="money-container"><span id="money-value">$500</span></div>
+
+        <!-- Mission Notification -->
+        <div id="mission-notification">
+          <h3>MISSION STARTED</h3>
+          <p>Deliver the package to the marker.</p>
         </div>
 
         <!-- Enter prompt -->

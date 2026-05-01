@@ -39,12 +39,14 @@ export class WeaponSystem {
         this.weapons.set(WeaponType.PISTOL, {
             name: 'Pistol',
             damage: 35,
-            fireRate: 0.15,
+            fireRate: 0.25,
             range: 100,
-            ammo: 30,
+            ammo: 60,
+            magazineSize: 12,
+            reloadTime: 1.5,
             bulletSpeed: 50
         });
-        this.ammo.set(WeaponType.PISTOL, 30);
+        this.ammo.set(WeaponType.PISTOL, 12);
 
         // Shotgun
         this.weapons.set(WeaponType.SHOTGUN, {
@@ -52,7 +54,9 @@ export class WeaponSystem {
             damage: 100,
             fireRate: 0.8,
             range: 30,
-            ammo: 8,
+            ammo: 24,
+            magazineSize: 8,
+            reloadTime: 2.5,
             bulletSpeed: 40
         });
         this.ammo.set(WeaponType.SHOTGUN, 8);
@@ -61,23 +65,14 @@ export class WeaponSystem {
         this.weapons.set(WeaponType.RIFLE, {
             name: 'Rifle',
             damage: 50,
-            fireRate: 0.2,
+            fireRate: 0.1,
             range: 200,
-            ammo: 30,
+            ammo: 90,
+            magazineSize: 30,
+            reloadTime: 2.0,
             bulletSpeed: 80
         });
         this.ammo.set(WeaponType.RIFLE, 30);
-
-        // Minigun
-        this.weapons.set(WeaponType.MINIGUN, {
-            name: 'Minigun',
-            damage: 20,
-            fireRate: 0.05,
-            range: 150,
-            ammo: 200,
-            bulletSpeed: 60
-        });
-        this.ammo.set(WeaponType.MINIGUN, 200);
     }
 
     public switchWeapon(weaponType: WeaponType) {
@@ -109,35 +104,42 @@ export class WeaponSystem {
         const current = this.ammo.get(this.currentWeapon) || 0;
         const stats = this.weapons.get(this.currentWeapon);
         if (stats && stats.ammo > 0) {
-            const newAmount = Math.min(current + amount, stats.ammo * 3); // Max 3x ammo
+            const newAmount = Math.min(current + amount, stats.ammo * 3);
             this.ammo.set(this.currentWeapon, newAmount);
         }
     }
 
+    private isReloading = false;
+
     public fire(): boolean {
+        if (this.isReloading) return false;
+        
         const stats = this.getWeaponStats();
         const currentAmmo = this.getAmmo();
 
-        // Check ammo
         if (stats.ammo > 0 && currentAmmo <= 0) {
+            this.reload();
             return false;
         }
 
-        // Consume ammo
-        if (stats.ammo > 0) {
-            this.setAmmo(currentAmmo - 1);
-        }
+        if (stats.ammo > 0) this.setAmmo(currentAmmo - 1);
 
-        // Play sound
-        if (this.currentWeapon === WeaponType.SHOTGUN) {
-            this.sound.playExplosion();
-        } else if (this.currentWeapon === WeaponType.MINIGUN) {
-            this.sound.playShoot();
-        } else {
-            this.sound.playShoot();
-        }
-
+        this.sound.playShoot();
         return true;
+    }
+
+    public async reload() {
+        if (this.isReloading) return;
+        const stats = this.getWeaponStats();
+        if (stats.ammo === -1) return; // No reload for fists
+
+        this.isReloading = true;
+        this.sound.playReload();
+        
+        await new Promise(r => setTimeout(r, stats.reloadTime * 1000));
+        
+        this.setAmmo(stats.magazineSize);
+        this.isReloading = false;
     }
 
     public getAllWeapons(): WeaponType[] {
@@ -151,7 +153,7 @@ export class WeaponSystem {
     public fullAmmo() {
         for (const [weaponType, stats] of this.weapons) {
             if (stats.ammo > 0) {
-                this.ammo.set(weaponType, stats.ammo);
+                this.ammo.set(weaponType, stats.magazineSize);
             }
         }
     }
@@ -162,6 +164,8 @@ export interface WeaponStats {
     damage: number;
     fireRate: number;
     range: number;
-    ammo: number; // -1 for infinite
+    ammo: number;
+    magazineSize: number;
+    reloadTime: number;
     bulletSpeed: number;
 }

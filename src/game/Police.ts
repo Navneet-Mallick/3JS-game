@@ -55,20 +55,20 @@ export class Police extends TrafficCar {
         this.sirenMeshes = [sirenR, sirenB];
     }
 
-    public update(dt: number, playerPosition?: THREE.Vector3, isWanted?: boolean) {
+    public update(dt: number, targetPosition?: THREE.Vector3, isWanted?: boolean) {
         super.update(dt);
 
         if (this.isOccupied || this.isDead) return;
 
-        if (playerPosition && isWanted) {
-            this.updateChase(dt, playerPosition);
+        if (targetPosition && isWanted) {
+            this.updateChase(dt, targetPosition);
         } else if (this.isChasing) {
             this.stopChase();
         }
 
         // Siren flash
         if (this.isChasing) {
-            this.sirenFlash += dt * 5;
+            this.sirenFlash += dt * 8;
             const on = Math.sin(this.sirenFlash) > 0;
             if (this.sirenMeshes[0]) (this.sirenMeshes[0].material as THREE.MeshBasicMaterial).color.setHex(on ? 0xff2200 : 0x330000);
             if (this.sirenMeshes[1]) (this.sirenMeshes[1].material as THREE.MeshBasicMaterial).color.setHex(on ? 0x0044ff : 0x000033);
@@ -78,14 +78,13 @@ export class Police extends TrafficCar {
         }
     }
 
-    private updateChase(dt: number, playerPos: THREE.Vector3) {
+    private updateChase(dt: number, targetPos: THREE.Vector3) {
         const myPos  = this.getPosition();
-        const dist   = myPos.distanceTo(playerPos);
+        const dist   = myPos.distanceTo(targetPos);
 
-        // Enter/stay in chase if close enough
         if (dist < this.DETECTION_RANGE) {
             this.isChasing = true;
-            this.chaseTimer = 0; // reset timeout while in range
+            this.chaseTimer = 0;
         }
 
         if (!this.isChasing) return;
@@ -96,22 +95,15 @@ export class Police extends TrafficCar {
             return;
         }
 
-        // ─── Steering toward player (better intercept) ────────────────────────
-        // Aim slightly ahead of the player (future position)
         const spd = this.getSpeedKmh();
 
-        _toTarget.subVectors(playerPos, myPos).normalize();
+        _toTarget.subVectors(targetPos, myPos).normalize();
         _myFwd.set(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as any);
         const cross = _myFwd.x * _toTarget.z - _myFwd.z * _toTarget.x;
 
-        // Aggressive steering — clamp to ±0.7
-        const steer = Math.max(-0.7, Math.min(0.7, -cross * 3.0));
-
-        // Force: chase aggressively up to 70 km/h, then coast
-        const force = spd < 70 ? 3200 : spd < 80 ? 800 : 0;
-
-        // Hard brake when very close
-        const brake = dist < 5 ? 2000 : 0;
+        const steer = Math.max(-0.7, Math.min(0.7, -cross * 4.0));
+        const force = spd < 90 ? 3500 : 0; // Faster chase speed
+        const brake = dist < 6 ? 3000 : 0;
 
         this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 10 * dt);
         for (let i = 0; i < 4; i++) {
@@ -121,11 +113,11 @@ export class Police extends TrafficCar {
         this.vehicle.setSteeringValue(this.currentSteeringValue, 0);
         this.vehicle.setSteeringValue(this.currentSteeringValue, 1);
 
-        // ─── Shoot at player when in range ────────────────────────────────────
+        // Shooting logic remains same but could be improved
         this.shootTimer -= dt;
         if (dist < this.SHOOT_RANGE && this.shootTimer <= 0) {
             this.shootTimer = this.SHOOT_INTERVAL;
-            if (this.onShoot) this.onShoot(8); // 8 damage per shot
+            if (this.onShoot) this.onShoot(10); 
         }
     }
 
