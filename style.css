@@ -10,6 +10,8 @@ body {
   color: #fff;
   font-family: 'Outfit', sans-serif;
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: none; /* Prevent browser scroll/zoom during gameplay */
 }
 
 #app {
@@ -42,9 +44,9 @@ canvas {
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(10px);
+  /* Removed backdrop-filter: very expensive on mobile */
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .minimap-marker {
@@ -104,8 +106,8 @@ canvas {
   top: 2rem;
   right: 2rem;
   padding: 1.5rem;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(10px);
+  background: rgba(0, 0, 0, 0.6);
+  /* Removed backdrop-filter: expensive */
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.8);
@@ -241,8 +243,10 @@ canvas {
     border-radius: 15px;
     padding: 40px;
     box-shadow: 0 0 50px rgba(0, 255, 0, 0.3);
-    backdrop-filter: blur(10px);
-    min-width: 500px;
+    /* Removed backdrop-filter */
+    min-width: 320px;
+    max-width: 95vw;
+    box-sizing: border-box;
 }
 
 .menu-header {
@@ -363,12 +367,12 @@ canvas {
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(0, 0, 0, 0.88);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 10001;
-    backdrop-filter: blur(5px);
+    /* Removed backdrop-filter: too expensive */
 }
 
 .settings-screen, .credits-screen, .exit-confirmation {
@@ -377,9 +381,10 @@ canvas {
     border-radius: 15px;
     padding: 30px;
     box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
-    backdrop-filter: blur(10px);
-    min-width: 400px;
-    max-width: 600px;
+    /* Removed backdrop-filter */
+    min-width: 300px;
+    max-width: 92vw;
+    box-sizing: border-box;
 }
 
 .settings-header, .credits-content h2 {
@@ -499,9 +504,10 @@ canvas {
     border-radius: 15px;
     padding: 40px;
     box-shadow: 0 0 50px rgba(0, 255, 0, 0.3);
-    backdrop-filter: blur(10px);
-    min-width: 500px;
-    max-width: 600px;
+    /* Removed backdrop-filter */
+    min-width: 320px;
+    max-width: 95vw;
+    box-sizing: border-box;
 }
 
 .pause-header {
@@ -877,4 +883,74 @@ canvas {
   pointer-events: none;
   z-index: 10000;
   animation: floatUp 2s ease-out forwards;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MOBILE RESPONSIVE OVERRIDES
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* Hide keyboard instructions on mobile */
+  .instructions { display: none !important; }
+
+  /* Scale HUD text down */
+  #money-value, #score-value { font-size: 20px; }
+  #ammo-display              { font-size: 18px; }
+  #radio-station             { font-size: 18px; }
+
+  /* Move score/money away from corners to avoid overlap with touch buttons */
+  .score-display  { top: 10px; right: 10px; }
+  .money-display  { top: 10px; right: 110px; }
+  .ammo-display   { top: 10px; left: 10px; }
+  .radio-display  { top: 10px; left: 120px; }
+
+  /* Shrink minimap so joystick can live bottom-left */
+  .minimap-container {
+    width: 120px;
+    height: 120px;
+    bottom: 12px;
+    left: 12px;
+    /* Hidden on mobile — joystick occupies this space */
+    display: none !important;
+  }
+
+  /* Wanted stars strip — centre-top */
+  #wanted-stars {
+    top: 44px;
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
+  }
+
+  /* Speedometer — centre bottom */
+  #speedometer {
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
+  }
+
+  /* Mission panel — smaller, top-left below ammo */
+  #mission-panel {
+    top: 60px;
+    left: 8px;
+    min-width: 160px;
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  /* Menu container — full width on mobile */
+  .menu-container {
+    min-width: unset;
+    width: 92vw;
+    padding: 24px 18px;
+  }
+  .game-title { font-size: 32px; }
+
+  /* Pause container */
+  .pause-container {
+    min-width: unset;
+    width: 92vw;
+    padding: 24px 18px;
+  }
 }

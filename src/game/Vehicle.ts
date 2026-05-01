@@ -41,6 +41,7 @@ export class Vehicle {
     private currentEngineForce   = 0;
     private speedBoostTimer      = 0;
     private speedBoostMultiplier = 1;
+    private smoothedY            = 0;
     // Stuck detection: counts seconds player is throttling but speed < 3 km/h
     private stuckTimer = 0;
 
@@ -58,8 +59,11 @@ export class Vehicle {
         const chassisShape = new CANNON.Box(new CANNON.Vec3(1.0, 0.3, 2.2));
         this.chassisBody = new CANNON.Body({ mass: 1200, shape: chassisShape });
         this.chassisBody.position.set(position.x, position.y + 1.2, position.z);
-        this.chassisBody.linearDamping  = 0.2; // Solid feel
-        this.chassisBody.angularDamping = 0.8; // Prevent excessive spinning
+        this.chassisBody.linearDamping  = 0.1; // Reduced for smoother coasting
+        this.chassisBody.angularDamping = 0.85; // Keeps it stable
+
+        // Initialize smoothed Y
+        this.smoothedY = position.y;
         world.addBody(this.chassisBody);
 
         this.chassisMesh = this.buildCarModel();
@@ -75,11 +79,11 @@ export class Vehicle {
         const wheelOpts = {
             radius:                         0.38,
             directionLocal:                 new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness: 55,
-            suspensionRestLength: 0.28,
-            frictionSlip: 2.5,
-            dampingRelaxation: 3.5,
-            dampingCompression: 5.5,
+            suspensionStiffness: 35, // Softer suspension for bumps
+            suspensionRestLength: 0.35,
+            frictionSlip: 2.2, // Slightly more drift
+            dampingRelaxation: 4.5,
+            dampingCompression: 6.5,
             maxSuspensionForce: 100000,
             rollInfluence: 0.001,
             axleLocal: new CANNON.Vec3(1, 0, 0),
@@ -196,7 +200,7 @@ export class Vehicle {
         const ENGINE_FORCE = 3500 * gearRatio * this.speedBoostMultiplier; 
         const MAX_STEER    = Math.max(0.3, 0.6 - spd * 0.0035);
 
-        let targetForce = 0, steer = 0, brake = 0;
+        let targetForce = 0, targetSteer = 0, brake = 0;
         let throttle = false;
 
         if (this.isOccupied) {
@@ -206,8 +210,8 @@ export class Vehicle {
                 if (spd > 5 && this.gear > 0) brake = 2500;
                 else targetForce = -ENGINE_FORCE * 0.6; 
             }
-            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft')) steer += MAX_STEER;
-            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer -= MAX_STEER;
+            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft')) targetSteer -= MAX_STEER;
+            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) targetSteer += MAX_STEER;
             
             if (Input.isKeyDown(' ')) brake = 4000;
             
@@ -219,7 +223,7 @@ export class Vehicle {
                     else targetForce = -ENGINE_FORCE * 0.6;
                 }
                 if (Math.abs(TouchControls.moveX) > 0.1) {
-                    steer = -TouchControls.moveX * MAX_STEER;
+                    targetSteer = -TouchControls.moveX * MAX_STEER;
                 }
             }
 
@@ -230,7 +234,7 @@ export class Vehicle {
                     if (spd > 5) brake = 2500 * GamepadInput.lt;
                     else targetForce = -ENGINE_FORCE * 0.6 * GamepadInput.lt;
                 }
-                if (Math.abs(GamepadInput.leftX) > 0.05) steer = -GamepadInput.leftX * MAX_STEER;
+                if (Math.abs(GamepadInput.leftX) > 0.05) targetSteer = -GamepadInput.leftX * MAX_STEER;
                 if (GamepadInput.btnLB) brake = 2500;
             }
 
@@ -245,13 +249,14 @@ export class Vehicle {
             this.taillightMats.forEach(m => m.emissive.setHex(0x220000));
         }
 
-        // Smooth acceleration and deceleration
+        // Snappy acceleration and deceleration
         if (!throttle && targetForce === 0 && spd > 1) {
             // Natural rolling resistance
-            brake = Math.max(brake, 20);
+            brake = Math.max(brake, 30);
         }
         
-        this.currentEngineForce += (targetForce - this.currentEngineForce) * Math.min(1, 5 * dt);
+        // Smooth but responsive acceleration
+        this.currentEngineForce += (targetForce - this.currentEngineForce) * Math.min(1, 10 * dt);
 
         // Lateral speed for drift detection
         _carFwd.set(0, 0, 1).applyQuaternion(
@@ -263,8 +268,9 @@ export class Vehicle {
             .sub(_carFwd.clone().multiplyScalar(_vel.dot(_carFwd)))
             .length();
 
-        // Smooth steering
-        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 8 * dt);
+        // Smooth steering: Fast turn-in, smoother return to center
+        const steerSpeed = (targetSteer === 0) ? 6 : 12;
+        this.currentSteeringValue += (targetSteer - this.currentSteeringValue) * Math.min(1, steerSpeed * dt);
 
         // Apply forces
         // Apply forces to all wheels (4WD for maximum traction)
@@ -338,14 +344,17 @@ export class Vehicle {
             let diff = targetYaw - this.camYaw;
             while (diff >  Math.PI) diff -= Math.PI * 2;
             while (diff < -Math.PI) diff += Math.PI * 2;
-            this.camYaw += diff * Math.min(1, 3 * dt);
+            this.camYaw += diff * Math.min(1, 3 * dt); // Very silky auto-align
         }
 
-        const dynDist = this.CAM_DIST + this.getSpeedKmh() * 0.05;
+        const dynDist = this.CAM_DIST + this.getSpeedKmh() * 0.03;
+
+        // Smooth out vertical bumps for the camera
+        this.smoothedY += (this.chassisMesh.position.y - this.smoothedY) * Math.min(1, 8 * dt);
 
         _camTarget.set(
             this.chassisMesh.position.x,
-            this.chassisMesh.position.y + 1.2,
+            this.smoothedY + 1.2,
             this.chassisMesh.position.z
         );
 
@@ -355,8 +364,8 @@ export class Vehicle {
             _camTarget.z + dynDist * Math.cos(this.camYaw) * Math.cos(this.camPitch)
         );
 
-        // FIX: normalize lerp factor by frame time so camera speed is the same at any Hz
-        const baseLerp = Math.min(0.18, 0.08 + this.getSpeedKmh() * 0.002);
+        // Cinematic camera tracking
+        const baseLerp = 0.15;
         const lerpT    = 1 - Math.pow(1 - baseLerp, 60 * dt);
         this.camera.position.lerp(_camPos, lerpT);
         this.camera.lookAt(_camTarget);

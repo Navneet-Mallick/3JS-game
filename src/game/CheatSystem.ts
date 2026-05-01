@@ -7,271 +7,150 @@ import { Sound } from './Sound';
 import { MusicSystem } from './MusicSystem';
 import { WeaponSystem, WeaponType } from './WeaponSystem';
 
+// ── 7 working cheats only ────────────────────────────────────────────────────
+const CHEATS: Record<string, string> = {
+    ASPIRINE:        'full health',
+    LEAVEMEALONE:    'clear wanted level',
+    WEAPONSFORALL:   'full ammo all weapons',
+    BIGBANG:         'explosion',
+    PANZER:          'super vehicle',
+    YOUWONTTAKEMEALIVE: 'super jump',
+    CHASESTAT:       'max wanted level',
+};
+
 export class CheatSystem {
-    private player: Player;
-    private vehicle: Vehicle;
-    private wantedLevel: WantedLevel;
-    private sound: Sound;
-    private scene: THREE.Scene;
-    private world: CANNON.World;
-    private musicSystem: MusicSystem;
+    private player:       Player;
+    private vehicle:      Vehicle;
+    private wantedLevel:  WantedLevel;
+    private sound:        Sound;
+    private scene:        THREE.Scene;
+    private world:        CANNON.World;
+    private musicSystem:  MusicSystem;
     private weaponSystem: WeaponSystem;
 
-    private cheatBuffer: string = '';
-    private readonly CHEATS: { [key: string]: () => void } = {
-        'BIGBANG': () => this.bigBangCheat(),
-        'ASPIRINE': () => this.healthCheat(),
-        'PRECIOUSPROTECTION': () => this.armorCheat(),
-        'LEAVEMEALONE': () => this.clearWantedCheat(),
-        'CANTSEEME': () => this.invisibilityCheat(),
-        'YOUWONTTAKEMEALIVE': () => this.superJumpCheat(),
-        'CHASESTAT': () => this.maxWantedCheat(),
-        'WEAPONSFORALL': () => this.weaponsCheat(),
-        'NUTTERTOOLS': () => this.weaponsCheatHeavy(),
-        'THUGSTOOLS': () => this.weaponsCheatBasic(),
-        'PROFESSIONALTOOLS': () => this.weaponsCheatPro(),
-        'PANZER': () => this.spawnTankCheat(),
-        'BOMBSAWAY': () => this.bombsCheat(),
-        'GUNRUNNER': () => this.switchToPistol(),
-        'SHOTGUNNER': () => this.switchToShotgun(),
-        'RIFLEMAN': () => this.switchToRifle(),
-        'MINIGUNNER': () => this.switchToMinigun(),
-        'MUSICDEMON': () => this.playDemonsMusic(),
-        'MUSICEAGLES': () => this.playEaglesMusic(),
-        'MUSICKEEPERS': () => this.playKeepersMusic(),
-    };
+    private buffer = '';
 
     constructor(
-        player: Player,
-        vehicle: Vehicle,
-        wantedLevel: WantedLevel,
-        sound: Sound,
-        scene: THREE.Scene,
-        world: CANNON.World,
-        musicSystem: MusicSystem,
+        player:       Player,
+        vehicle:      Vehicle,
+        wantedLevel:  WantedLevel,
+        sound:        Sound,
+        scene:        THREE.Scene,
+        world:        CANNON.World,
+        musicSystem:  MusicSystem,
         weaponSystem: WeaponSystem
     ) {
-        this.player = player;
-        this.vehicle = vehicle;
-        this.wantedLevel = wantedLevel;
-        this.sound = sound;
-        this.scene = scene;
-        this.world = world;
-        this.musicSystem = musicSystem;
+        this.player       = player;
+        this.vehicle      = vehicle;
+        this.wantedLevel  = wantedLevel;
+        this.sound        = sound;
+        this.scene        = scene;
+        this.world        = world;
+        this.musicSystem  = musicSystem;
         this.weaponSystem = weaponSystem;
     }
 
     public handleKeyPress(key: string) {
-        this.cheatBuffer += key.toUpperCase();
-        
-        // Keep buffer size reasonable
-        if (this.cheatBuffer.length > 20) {
-            this.cheatBuffer = this.cheatBuffer.slice(-20);
-        }
+        this.buffer = (this.buffer + key.toUpperCase()).slice(-20);
 
-        // Check for cheats
-        for (const [cheat, callback] of Object.entries(this.CHEATS)) {
-            if (this.cheatBuffer.includes(cheat)) {
-                callback();
-                this.cheatBuffer = ''; // Clear buffer after successful cheat
-                this.showCheatNotification(cheat);
+        for (const [code, label] of Object.entries(CHEATS)) {
+            if (this.buffer.endsWith(code)) {
+                this.buffer = '';
+                this.activate(code, label);
+                return;
+            }
+        }
+    }
+
+    private activate(code: string, label: string) {
+        switch (code) {
+            case 'ASPIRINE':
+                this.player.health = 100;
+                this.player.armor  = 100;
+                this.sound.playPowerUp();
+                break;
+
+            case 'LEAVEMEALONE':
+                this.wantedLevel.clearWantedLevel();
+                this.sound.playCollect();
+                break;
+
+            case 'WEAPONSFORALL':
+                this.weaponSystem.switchWeapon(WeaponType.RIFLE);
+                this.weaponSystem.fullAmmo();
+                this.sound.playPowerUp();
+                break;
+
+            case 'BIGBANG': {
+                const pos = this.player.getPosition();
+                this.explode(pos, 50, 250);
+                this.wantedLevel.setLevel(Math.min(5, this.wantedLevel.getLevel() + 3));
                 break;
             }
-        }
-    }
 
-    private bigBangCheat() {
-        const playerPos = this.player.getPosition();
-        const explosionRadius = 50;
-        const explosionForce = 200;
+            case 'PANZER':
+                // Make the player vehicle temporarily indestructible & heavier
+                this.vehicle.chassisBody.mass = 6000;
+                this.vehicle.chassisBody.updateMassProperties();
+                this.sound.playPowerUp();
+                setTimeout(() => {
+                    this.vehicle.chassisBody.mass = 1200;
+                    this.vehicle.chassisBody.updateMassProperties();
+                }, 30_000);
+                break;
 
-        // Create explosion effect
-        this.createExplosion(playerPos, explosionRadius, explosionForce);
+            case 'YOUWONTTAKEMEALIVE':
+                (this.player as any).jumpForce = 20;
+                this.sound.playPowerUp();
+                setTimeout(() => { (this.player as any).jumpForce = 7; }, 20_000);
+                break;
 
-        // Damage all nearby vehicles
-        const bodies = this.world.bodies;
-        for (const body of bodies) {
-            const bodyPos = body.position;
-            const dist = Math.sqrt(
-                (bodyPos.x - playerPos.x) ** 2 +
-                (bodyPos.y - playerPos.y) ** 2 +
-                (bodyPos.z - playerPos.z) ** 2
-            );
-
-            if (dist < explosionRadius) {
-                const force = explosionForce * (1 - dist / explosionRadius);
-                const dirX = bodyPos.x - playerPos.x;
-                const dirY = bodyPos.y - playerPos.y;
-                const dirZ = bodyPos.z - playerPos.z;
-                const len = Math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
-                
-                body.applyImpulse(
-                    new CANNON.Vec3(
-                        (dirX / len) * force,
-                        (dirY / len) * force * 0.5,
-                        (dirZ / len) * force
-                    ),
-                    bodyPos
-                );
-            }
+            case 'CHASESTAT':
+                this.wantedLevel.setLevel(5);
+                this.sound.playExplosion();
+                break;
         }
 
-        this.sound.playExplosion();
-        this.wantedLevel.addWantedLevel(3);
+        this.notify(label.toUpperCase());
     }
 
-    private healthCheat() {
-        (this.player as any).health = 100;
-        this.sound.playPowerUp();
-    }
+    private explode(center: THREE.Vector3, radius: number, force: number) {
+        // Visual flash
+        const geo  = new THREE.SphereGeometry(radius * 0.4, 8, 8);
+        const mat  = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.85 });
+        const ball = new THREE.Mesh(geo, mat);
+        ball.position.copy(center);
+        this.scene.add(ball);
 
-    private armorCheat() {
-        (this.player as any).armor = 100;
-        this.sound.playPowerUp();
-    }
-
-    private clearWantedCheat() {
-        this.wantedLevel.clearWantedLevel();
-        this.sound.playCollect();
-    }
-
-    private invisibilityCheat() {
-        // FIX: Player uses 'visible' not 'invisible'
-        this.player.visible = false;
-        this.sound.playPowerUp();
-        setTimeout(() => {
-            this.player.visible = true;
-        }, 30000);
-    }
-
-    private superJumpCheat() {
-        // FIX: Player uses 'jumpForce' not 'jumpPower'
-        (this.player as any).jumpForce = 22;
-        this.sound.playPowerUp();
-        setTimeout(() => {
-            (this.player as any).jumpForce = 7;
-        }, 20000);
-    }
-
-    private maxWantedCheat() {
-        this.wantedLevel.setLevel(5);
-        this.sound.playExplosion();
-    }
-
-    private weaponsCheat() {
-        this.weaponSystem.fullAmmo();
-        this.sound.playPowerUp();
-    }
-
-    private weaponsCheatBasic() {
-        this.weaponSystem.switchWeapon(WeaponType.PISTOL);
-        this.weaponSystem.fullAmmo();
-        this.sound.playPowerUp();
-    }
-
-    private weaponsCheatPro() {
-        this.weaponSystem.switchWeapon(WeaponType.RIFLE);
-        this.weaponSystem.fullAmmo();
-        this.sound.playPowerUp();
-    }
-
-    private weaponsCheatHeavy() {
-        this.weaponSystem.switchWeapon(WeaponType.MINIGUN);
-        this.weaponSystem.fullAmmo();
-        this.sound.playPowerUp();
-    }
-
-    private spawnTankCheat() {
-        // Spawn a very heavy vehicle (represented by the supercar mesh for now)
-        this.vehicle.chassisBody.mass = 5000;
-        this.vehicle.chassisBody.updateMassProperties();
-        this.sound.playPowerUp();
-    }
-
-    private bombsCheat() {
-        // Give player bombs
-        (this.player as any).bombs = 10;
-        this.sound.playPowerUp();
-    }
-
-    private createExplosion(center: THREE.Vector3, radius: number, force: number) {
-        // Create visual explosion effect
-        const explosionGeometry = new THREE.IcosahedronGeometry(radius * 0.5, 4);
-        const explosionMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff6600,
-            transparent: true,
-            opacity: 0.8
-        });
-        const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
-        explosion.position.copy(center);
-        this.scene.add(explosion);
-
-        // Animate explosion
-        let scale = 0.1;
-        let opacity = 0.8;
-        const animate = () => {
-            scale += 0.15;
-            opacity -= 0.08;
-            
-            explosion.scale.setScalar(scale);
-            (explosion.material as THREE.MeshBasicMaterial).opacity = opacity;
-            
-            if (opacity > 0) {
-                requestAnimationFrame(animate);
-            } else {
-                this.scene.remove(explosion);
-            }
+        let opacity = 0.85;
+        const fade = () => {
+            opacity -= 0.07;
+            mat.opacity = Math.max(0, opacity);
+            ball.scale.addScalar(0.12);
+            if (opacity > 0) requestAnimationFrame(fade);
+            else             this.scene.remove(ball);
         };
-        animate();
-    }
+        fade();
 
-    private showCheatNotification(cheatName: string) {
-        const notification = document.getElementById('cheat-text');
-        if (notification) {
-            notification.textContent = `CHEAT ACTIVATED: ${cheatName}`;
-            notification.style.opacity = '1';
-            setTimeout(() => {
-                notification.style.opacity = '0';
-            }, 2000);
+        // Physics impulses
+        for (const body of this.world.bodies) {
+            const dx = body.position.x - center.x;
+            const dy = body.position.y - center.y;
+            const dz = body.position.z - center.z;
+            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            if (dist > radius || dist < 0.01) continue;
+            const f = force * (1 - dist / radius);
+            const inv = 1 / dist;
+            body.applyImpulse(new CANNON.Vec3(dx*inv*f, dy*inv*f*0.6, dz*inv*f), body.position);
         }
+        this.sound.playExplosion();
     }
 
-    private switchToPistol() {
-        this.weaponSystem.switchWeapon(WeaponType.PISTOL);
-        this.weaponSystem.fullAmmo();
-        this.sound.playReload();
-    }
-
-    private switchToShotgun() {
-        this.weaponSystem.switchWeapon(WeaponType.SHOTGUN);
-        this.weaponSystem.fullAmmo();
-        this.sound.playReload();
-    }
-
-    private switchToRifle() {
-        this.weaponSystem.switchWeapon(WeaponType.RIFLE);
-        this.weaponSystem.fullAmmo();
-        this.sound.playReload();
-    }
-
-    private switchToMinigun() {
-        this.weaponSystem.switchWeapon(WeaponType.MINIGUN);
-        this.weaponSystem.fullAmmo();
-        this.sound.playReload();
-    }
-
-    private playDemonsMusic() {
-        this.musicSystem.playTrack('demons');
-        this.sound.playCollect();
-    }
-
-    private playEaglesMusic() {
-        this.musicSystem.playTrack('eagles');
-        this.sound.playCollect();
-    }
-
-    private playKeepersMusic() {
-        this.musicSystem.playTrack('keepers');
-        this.sound.playCollect();
+    private notify(text: string) {
+        const el = document.getElementById('cheat-text');
+        if (!el) return;
+        el.textContent  = `CHEAT: ${text}`;
+        el.style.opacity = '1';
+        setTimeout(() => { el.style.opacity = '0'; }, 2500);
     }
 }

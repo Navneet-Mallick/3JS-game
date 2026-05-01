@@ -152,9 +152,17 @@ export class Core {
                 this.weaponSystem
             );
 
-            // Start with a random track
-            const tracks = ['demons', 'eagles', 'keepers'];
-            this.musicSystem.playTrack(tracks[Math.floor(Math.random() * tracks.length)]);
+            // Start music after first user interaction (pointer lock)
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement) {
+                    this.musicSystem.start();
+                }
+            }, { once: true });
+
+            // Skip track with N key
+            document.addEventListener('keydown', (e) => {
+                if (e.key.toLowerCase() === 'n') this.musicSystem.nextTrack();
+            });
 
             const pedSpawns: [number, number, number][] = [
                 [10, 0, 10], [-10, 0, 10], [10, 0, -10], [-10, 0, -10],
@@ -166,6 +174,15 @@ export class Core {
                     null,
                     new THREE.Vector3(x, y, z)
                 ));
+            }
+
+            // Wire up police shooting
+            for (const p of this.police) {
+                p.onShoot = (dmg) => {
+                    if (!this.playerInVehicle) {
+                        this.player.health -= dmg;
+                    }
+                };
             }
 
             this.minimap = new Minimap('minimap-canvas');
@@ -258,19 +275,14 @@ export class Core {
 
     // ── Bullet Fire Handler ───────────────────────────────────────────────────
     private handleBulletFire(origin: THREE.Vector3, direction: THREE.Vector3, damage: number, range: number) {
-        // Create raycaster for bullet
         const raycaster = new THREE.Raycaster(origin, direction, 0, range);
-        
-        // Muzzle flash effect
+
+        // Muzzle flash + tracer (once each)
         this.createMuzzleFlash(origin, direction);
-        
-        // Check hits on pedestrians
+        this.createTracer(origin, direction);
+
         let hitSomething = false;
         let hitPosition: THREE.Vector3 | null = null;
-        
-        // Muzzle flash and tracer effects
-        this.createMuzzleFlash(origin, direction);
-        this.createTracer(origin, direction, range);
         
         for (let i = 0; i < this.pedestrians.length; i++) {
             const ped = this.pedestrians[i];
@@ -349,25 +361,29 @@ export class Core {
         animate();
     }
 
-    private createTracer(origin: THREE.Vector3, direction: THREE.Vector3, range: number) {
-        const tracerGeo = new THREE.BoxGeometry(0.04, 0.04, 2);
-        const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 });
-        const tracer = new THREE.Mesh(tracerGeo, tracerMat);
-        
-        tracer.position.copy(origin).add(direction.clone().multiplyScalar(4));
-        tracer.lookAt(origin.clone().add(direction.clone().multiplyScalar(10)));
+    private createTracer(origin: THREE.Vector3, direction: THREE.Vector3) {
+        const tracerGeo = new THREE.BoxGeometry(0.04, 0.04, 1.8);
+        const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffee88, transparent: true, opacity: 0.85 });
+        const tracer    = new THREE.Mesh(tracerGeo, tracerMat);
+
+        tracer.position.copy(origin).addScaledVector(direction, 3);
+        tracer.lookAt(origin.clone().addScaledVector(direction, 20));
         this.scene.getScene().add(tracer);
-        
+
         let life = 1.0;
-        const speed = 8.0;
-        const animate = () => {
-            life -= 0.05;
-            tracer.position.add(direction.clone().multiplyScalar(speed));
-            tracer.scale.z = life * 5;
-            if (life > 0) requestAnimationFrame(animate);
-            else this.scene.getScene().remove(tracer);
+        const move = () => {
+            life -= 0.06;
+            tracer.position.addScaledVector(direction, 7);
+            tracer.scale.z = Math.max(0.01, life);
+            tracer.material.opacity = life * 0.9;
+            if (life > 0) requestAnimationFrame(move);
+            else {
+                this.scene.getScene().remove(tracer);
+                tracerGeo.dispose();
+                tracerMat.dispose();
+            }
         };
-        animate();
+        move();
     }
 
     private spawnDynamicPickup(position: THREE.Vector3) {
@@ -726,6 +742,8 @@ export class Core {
         }
 
         this.wantedLevel.update(dt);
+        this.crimeSystem.update(dt);
+        this.musicSystem.update(dt);
         this.updateHUD(dt);
         this.handleBusted(dt);
 
@@ -842,30 +860,26 @@ export class Core {
             if (_dp.lengthSq() < 10000) p.update(dt, playerPos); // 100²
         }
 
-        // Police update and active spawning
-        this.wantedLevel.update(dt);
-        this.crimeSystem.update(dt);
-        
+        // Police update — single pass, no duplicate wantedLevel.update
         const isWanted = this.wantedLevel.isWanted();
         for (let i = 0; i < this.police.length; i++) {
-            const p = this.police[i];
+            const p  = this.police[i];
             const pPos = p.getPosition();
-            const dSq = pPos.distanceToSquared(playerPos);
-            
-            // If wanted and police is too far away (> 200m), respawn it near the player
-            if (isWanted && dSq > 40000) { // 200²
+            const dSq  = pPos.distanceToSquared(playerPos);
+
+            // Respawn far police near player when wanted
+            if (isWanted && dSq > 40000) {
                 const angle = Math.random() * Math.PI * 2;
-                const dist = 60 + Math.random() * 40;
-                const rx = playerPos.x + Math.sin(angle) * dist;
-                const rz = playerPos.z + Math.cos(angle) * dist;
-                p.chassisBody.position.set(rx, 5, rz);
+                const dist  = 60 + Math.random() * 40;
+                p.chassisBody.position.set(
+                    playerPos.x + Math.sin(angle) * dist, 3,
+                    playerPos.z + Math.cos(angle) * dist
+                );
                 p.chassisBody.velocity.set(0, 0, 0);
                 p.stopChase();
             }
-            
-            if (dSq < 32400) { // 180²
-                p.update(dt, playerPos, isWanted);
-            }
+
+            if (dSq < 32400) p.update(dt, playerPos, isWanted); // 180m
         }
 
         // Check for crimes

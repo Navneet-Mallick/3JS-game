@@ -179,8 +179,8 @@ export class TrafficCar {
 
             if (Input.isKeyDown('w') || Input.isKeyDown('arrowup')) { force = ENGINE_FORCE; }
             if (Input.isKeyDown('s') || Input.isKeyDown('arrowdown')) { force = -ENGINE_FORCE * 0.6; }
-            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft')) steer = MAX_STEER;
-            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = -MAX_STEER;
+            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft')) steer = -MAX_STEER;
+            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer = MAX_STEER;
             handbrake = Input.isKeyDown(' ');
             brake = handbrake ? 3000 : 0;
             

@@ -34,6 +34,7 @@ export class Bike {
     private speedBoostTimer      = 0;
     private speedBoostMultiplier = 1;
     private stuckTimer = 0;
+    private smoothedY            = 0;
 
     constructor(
         scene:    THREE.Scene,
@@ -49,9 +50,11 @@ export class Bike {
         const chassisShape = new CANNON.Box(new CANNON.Vec3(0.3, 0.4, 0.9));
         this.chassisBody = new CANNON.Body({ mass: 200, shape: chassisShape });
         this.chassisBody.position.set(position.x, position.y + 1.0, position.z);
-        this.chassisBody.linearDamping  = 0.15;
-        this.chassisBody.angularDamping = 0.6;
+        this.chassisBody.linearDamping  = 0.1; // Smoother coasting
+        this.chassisBody.angularDamping = 0.65; // Slightly more stable
         world.addBody(this.chassisBody);
+
+        this.smoothedY = position.y;
 
         this.chassisMesh = this.buildBikeModel();
         this.scene.add(this.chassisMesh);
@@ -66,11 +69,11 @@ export class Bike {
         const wheelOpts = {
             radius:                         0.32,
             directionLocal:                 new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness: 65,
-            suspensionRestLength: 0.3,
-            frictionSlip: 2.5,
-            dampingRelaxation: 4.5,
-            dampingCompression: 6.5,
+            suspensionStiffness: 45, // Softer for bumps
+            suspensionRestLength: 0.35,
+            frictionSlip: 2.2, // More forgiving drift
+            dampingRelaxation: 5.0,
+            dampingCompression: 7.0,
             maxSuspensionForce: 100000,
             rollInfluence: 0.001,
             axleLocal:                      new CANNON.Vec3(1, 0, 0),
@@ -162,7 +165,7 @@ export class Bike {
         const BRAKE_FORCE  = 180;
         const MAX_STEER    = Math.max(0.4, 0.8 - spd * 0.005);
 
-        let targetForce = 0, steer = 0, brake = 0;
+        let targetForce = 0, targetSteer = 0, brake = 0;
         let throttle = false, handbrake = false;
 
         if (this.isOccupied) {
@@ -171,8 +174,8 @@ export class Bike {
                 if (spd > 5) brake = BRAKE_FORCE;
                 else targetForce = -ENGINE_FORCE * 0.6; 
             }
-            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  steer +=  MAX_STEER;
-            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) steer -= MAX_STEER;
+            if (Input.isKeyDown('a') || Input.isKeyDown('arrowleft'))  targetSteer -=  MAX_STEER;
+            if (Input.isKeyDown('d') || Input.isKeyDown('arrowright')) targetSteer += MAX_STEER;
             handbrake = Input.isKeyDown(' ');
             if (handbrake) brake = 500;
 
@@ -182,7 +185,7 @@ export class Bike {
                     if (spd > 5) brake = BRAKE_FORCE;
                     else targetForce = -ENGINE_FORCE * 0.6;
                 }
-                if (Math.abs(TouchControls.moveX) > 0.1) steer = -TouchControls.moveX * MAX_STEER;
+                if (Math.abs(TouchControls.moveX) > 0.1) targetSteer = -TouchControls.moveX * MAX_STEER;
             }
 
             this.sound.updateEngine(spd * 0.7, throttle);
@@ -195,7 +198,7 @@ export class Bike {
         if (!throttle && targetForce === 0 && spd > 1) {
             brake = Math.max(brake, 15);
         }
-        this.currentEngineForce += (targetForce - this.currentEngineForce) * Math.min(1, 6 * dt);
+        this.currentEngineForce += (targetForce - this.currentEngineForce) * Math.min(1, 10 * dt);
 
         _bikeFwd.set(0, 0, 1).applyQuaternion(this.chassisBody.quaternion as unknown as THREE.Quaternion);
         
@@ -203,19 +206,20 @@ export class Bike {
         const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.chassisBody.quaternion as any);
         const worldUp = new THREE.Vector3(0, 1, 0);
         const tilt = currentUp.cross(worldUp);
-        const stabilityFactor = 250; // Much lower for natural feel
+        const stabilityFactor = 400; // Balanced for responsive but natural feel
         this.chassisBody.angularVelocity.x += tilt.x * stabilityFactor * dt;
         this.chassisBody.angularVelocity.z += tilt.z * stabilityFactor * dt;
         
         // Add leaning while steering
         if (spd > 5) {
-            this.chassisBody.angularVelocity.z -= steer * 3.5 * dt;
+            this.chassisBody.angularVelocity.z -= targetSteer * 3.5 * dt;
         }
 
         _vel.set(this.chassisBody.velocity.x, 0, this.chassisBody.velocity.z);
         this.lateralSpeed = _vel.clone().sub(_bikeFwd.clone().multiplyScalar(_vel.dot(_bikeFwd))).length();
 
-        this.currentSteeringValue += (steer - this.currentSteeringValue) * Math.min(1, 15 * dt);
+        const steerSpeed = (targetSteer === 0) ? 6 : 12;
+        this.currentSteeringValue += (targetSteer - this.currentSteeringValue) * Math.min(1, steerSpeed * dt);
 
         this.vehicle.applyEngineForce(this.currentEngineForce, 0);
         this.vehicle.applyEngineForce(this.currentEngineForce, 1);
@@ -262,11 +266,15 @@ export class Bike {
             let diff = targetYaw - this.camYaw;
             while (diff > Math.PI) diff -= Math.PI * 2;
             while (diff < -Math.PI) diff += Math.PI * 2;
-            this.camYaw += diff * Math.min(1, 4 * dt);
+            this.camYaw += diff * Math.min(1, 4 * dt); // Silky auto-align
         }
-        _camTarget.set(this.chassisMesh.position.x, this.chassisMesh.position.y + 1, this.chassisMesh.position.z);
+        
+        this.smoothedY += (this.chassisMesh.position.y - this.smoothedY) * Math.min(1, 8 * dt);
+        
+        _camTarget.set(this.chassisMesh.position.x, this.smoothedY + 1, this.chassisMesh.position.z);
         _camPos.set(_camTarget.x + this.CAM_DIST * Math.sin(this.camYaw) * Math.cos(this.camPitch), _camTarget.y + this.CAM_DIST * Math.sin(this.camPitch), _camTarget.z + this.CAM_DIST * Math.cos(this.camYaw) * Math.cos(this.camPitch));
-        this.camera.position.lerp(_camPos, 0.15);
+        const lerpT = 1 - Math.pow(1 - 0.15, 60 * dt); // Cinematic tracking
+        this.camera.position.lerp(_camPos, lerpT);
         this.camera.lookAt(_camTarget);
     }
 

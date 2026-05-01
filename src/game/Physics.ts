@@ -40,8 +40,8 @@ export class Physics {
     }
 
     public update(dt: number) {
-        // Higher frequency (1/120) and more substeps (10) for "car game" smoothness
-        this.world.step(1 / 120, dt, 10);
+        // Fixed 1/60 step with 3 substeps: smooth on desktop, not heavy on mobile
+        this.world.step(1 / 60, dt, 3);
     }
 
     public getWorld() { return this.world; }
